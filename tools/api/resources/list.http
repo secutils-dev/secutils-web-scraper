@@ -1,0 +1,8 @@
+### List resources
+POST {{host}}/api/resources
+Accept: application/json
+Content-Type: application/json
+
+{
+  "url": "https://secutils.dev"
+}
