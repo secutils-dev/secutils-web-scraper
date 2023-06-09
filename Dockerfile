@@ -11,7 +11,8 @@ RUN set -x && yarn build
 
 FROM node:20-alpine3.18
 ENV NODE_ENV=production \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    SECUTILS_WEB_SCRAPPER_BROWSER_EXECUTABLE_PATH="/usr/bin/chromium-browser"
 WORKDIR /app
 RUN set -x && apk update --no-cache && \
     apk upgrade --no-cache && \
