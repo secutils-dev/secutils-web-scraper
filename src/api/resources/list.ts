@@ -146,7 +146,7 @@ async function getResourcesList(
 
   log.debug(`Fetching resources for "${url}" (timeout: ${timeout}ms).`);
   try {
-    await page.goto(url, { waitUntil: 'networkidle', timeout });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
     log.debug(`Page "${url}" is loaded.`);
   } catch (err) {
     log.error(`Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`);

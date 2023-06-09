@@ -76,7 +76,7 @@ await test('[/api/resources] can parse resources', async (t) => {
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
   assert.deepEqual(pageMock.goto.mock.calls[0].arguments, [
     'https://secutils.dev',
-    { waitUntil: 'networkidle', timeout: 5000 },
+    { waitUntil: 'domcontentloaded', timeout: 5000 },
   ]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
