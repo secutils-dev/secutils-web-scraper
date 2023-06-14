@@ -64,7 +64,7 @@ const RESOURCES_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { src: { type: 'string' }, digest: { type: 'string' }, size: { type: 'number' } },
+        properties: { url: { type: 'string' }, digest: { type: 'string' }, size: { type: 'number' } },
       },
     },
     inline: {
@@ -129,7 +129,7 @@ async function getResourcesList(
       (responseBody) => {
         log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
         externalResources.set(response.url(), {
-          src: response.url(),
+          url: response.url(),
           size: responseBody.byteLength,
           digest: createHash('sha256').update(responseBody).digest('hex'),
         });
@@ -168,7 +168,7 @@ async function getResourcesList(
   await setTimeoutAsync(delay);
 
   const result: OutputBodyType = {
-    timestamp: Date.now(),
+    timestamp: Math.floor(Date.now() / 1000),
     scripts: { external: [], inline: [] },
     styles: { external: [], inline: [] },
   };
@@ -185,9 +185,9 @@ async function getResourcesList(
 
       const scripts: OutputBodyType['scripts'] = { external: [], inline: [] };
       for (const el of Array.from(targetWindow.document.querySelectorAll('script'))) {
-        const src = el.src.trim();
-        if (src) {
-          scripts.external.push({ src });
+        const url = el.src.trim();
+        if (url) {
+          scripts.external.push({ url });
         } else {
           const contentBlob = new Blob([el.innerHTML]);
           scripts.inline.push({
@@ -199,7 +199,7 @@ async function getResourcesList(
 
       const styles: OutputBodyType['styles'] = {
         external: Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]')).map((el) => ({
-          src: (el as HTMLLinkElement).href.trim(),
+          url: (el as HTMLLinkElement).href.trim(),
         })),
         inline: [],
       };
@@ -229,7 +229,7 @@ async function getResourcesList(
   }
 
   const enhanceResourceMeta = (resource: ExternalResource) => {
-    const externalResourceData = externalResources.get(resource.src);
+    const externalResourceData = externalResources.get(resource.url);
     return !externalResourceData ? resource : { ...resource, ...externalResourceData };
   };
 

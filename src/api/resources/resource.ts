@@ -5,7 +5,7 @@ export interface ExternalResource {
   /**
    * The URL resources is loaded from.
    */
-  src: string;
+  url: string;
 
   /**
    * SHA256 digest of the external resource content, if available.

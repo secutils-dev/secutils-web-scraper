@@ -10,7 +10,7 @@ await test('[/api/resources] can successfully create route', () => {
 });
 
 await test('[/api/resources] can parse resources', async (t) => {
-  t.mock.method(Date, 'now', () => 123);
+  t.mock.method(Date, 'now', () => 123000);
 
   const windowMock = createWindowMock();
   windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
@@ -50,7 +50,7 @@ await test('[/api/resources] can parse resources', async (t) => {
       scripts: {
         external: [
           {
-            src: 'https://secutils.dev/script.js',
+            url: 'https://secutils.dev/script.js',
             digest: '5f483264496cf1440c6ef569cc4fb9785d3bed896efdadfc998e9cb1badcec81',
             size: 9,
           },
@@ -59,9 +59,9 @@ await test('[/api/resources] can parse resources', async (t) => {
       },
       styles: {
         external: [
-          { src: 'https://secutils.dev/style.css' },
+          { url: 'https://secutils.dev/style.css' },
           {
-            src: 'https://secutils.dev/fonts.css',
+            url: 'https://secutils.dev/fonts.css',
             digest: '4bf5d080989904bed2dfeb753a25567e4080d3f77d03fe6a1c67b5dc55e9f19f',
             size: 18,
           },
