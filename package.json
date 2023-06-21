@@ -1,5 +1,5 @@
 {
-  "name": "secutils-web-scrapper",
+  "name": "secutils-web-scraper",
   "private": true,
   "author": {
     "name": "Secutils.dev",
@@ -14,7 +14,7 @@
   "scripts": {
     "prebuild": "eslint . && rm -rf dist",
     "build": "tsc --project ./",
-    "watch": "SECUTILS_WEB_SCRAPPER_ENV_PATH=./.env NODE_OPTIONS=--loader=ts-node/esm nodemon src/index.ts",
+    "watch": "SECUTILS_WEB_SCRAPER_ENV_PATH=./.env NODE_OPTIONS=--loader=ts-node/esm nodemon src/index.ts",
     "test": "NODE_NO_WARNINGS=1 node --loader=ts-node/esm --test ./src/tests.ts",
     "test:watch": "NODE_NO_WARNINGS=1 NODE_OPTIONS= node --loader=ts-node/esm --test --watch ./src/tests.ts"
   },

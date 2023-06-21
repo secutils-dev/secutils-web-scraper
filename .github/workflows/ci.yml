@@ -1,4 +1,4 @@
-name: Secutils Web Scrapper
+name: Secutils Web Scraper
 
 on:
   push:

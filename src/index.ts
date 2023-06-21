@@ -17,7 +17,7 @@ let browser: Browser | undefined;
 let browserShutdownTimer: NodeJS.Timeout | undefined;
 // Cache with 20 minutes TTL.
 const cache = new NodeCache({ stdTTL: config.cacheTTLSec });
-const server = fastify({ logger: { level: process.env.SECUTILS_WEB_SCRAPPER_LOG_LEVEL ?? 'debug' } })
+const server = fastify({ logger: { level: process.env.SECUTILS_WEB_SCRAPER_LOG_LEVEL ?? 'debug' } })
   .register(fastifyCompress)
   .addHook('onClose', (instance) => stopBrowser(instance));
 
@@ -26,7 +26,7 @@ async function runBrowser(serverInstance: FastifyInstance) {
   serverInstance.log.info(`Running browser (headless: ${headless.toString()})...`);
   try {
     const browserToRun = await chromium.launch({
-      executablePath: process.env.SECUTILS_WEB_SCRAPPER_BROWSER_EXECUTABLE_PATH || undefined,
+      executablePath: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH || undefined,
       // defaultViewport: { width: 1600, height: 1200 },
       args: ['--no-sandbox', '--disable-dev-shm-usage'],
       // ignoreHTTPSErrors: true,
