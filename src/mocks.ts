@@ -40,13 +40,19 @@ export function createWindowMock() {
 
 export interface ResponseMockOptions {
   url: string;
+  resourceType: 'script' | 'stylesheet';
   body?: unknown;
 }
 
 export type ResponseMock = ReturnType<typeof createResponseMock>;
-export function createResponseMock({ url, body }: ResponseMockOptions) {
+export function createResponseMock({ url, body, resourceType }: ResponseMockOptions) {
   return {
     url: () => url,
+    request: () => ({
+      resourceType: () => resourceType,
+      isNavigationRequest: () => false,
+      method: () => 'GET',
+    }),
     body: () => {
       return Promise.resolve(
         Buffer.isBuffer(body)

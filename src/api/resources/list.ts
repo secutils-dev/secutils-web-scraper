@@ -4,7 +4,7 @@ import { setTimeout as setTimeoutAsync } from 'timers/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Browser } from 'playwright';
 
-import type { ExternalResource, InlineResource } from './resource.js';
+import type { Resource } from './resource.js';
 import type { APIRouteParams } from '../api_route_params.js';
 import { Diagnostics } from '../diagnostics.js';
 
@@ -43,34 +43,20 @@ interface InputBodyParamsType {
   waitSelector?: string;
 }
 
-export interface ResourceBundle {
-  external: ExternalResource[];
-  inline: InlineResource[];
-}
-
 /**
  * List of discovered resources.
  */
 type OutputBodyType = {
   timestamp: number;
-  scripts: ResourceBundle;
-  styles: ResourceBundle;
+  scripts: Resource[];
+  styles: Resource[];
 };
 
 const RESOURCES_SCHEMA = {
-  type: 'object',
-  properties: {
-    external: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { url: { type: 'string' }, digest: { type: 'string' }, size: { type: 'number' } },
-      },
-    },
-    inline: {
-      type: 'array',
-      items: { type: 'object', properties: { digest: { type: 'string' }, size: { type: 'number' } } },
-    },
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: { url: { type: 'string' }, digest: { type: 'string' }, size: { type: 'number' } },
   },
 };
 
@@ -123,8 +109,18 @@ async function getResourcesList(
 ): Promise<OutputBodyType> {
   const page = await browser.newPage();
 
-  const externalResources = new Map<string, ExternalResource>();
+  const externalResources = new Map<string, Resource & { resourceType: 'script' | 'stylesheet' }>();
   page.on('response', (response) => {
+    const request = response.request();
+    const resourceType = request.resourceType() as 'script' | 'stylesheet';
+    if (
+      request.isNavigationRequest() ||
+      request.method() !== 'GET' ||
+      (resourceType !== 'script' && resourceType !== 'stylesheet')
+    ) {
+      return;
+    }
+
     response.body().then(
       (responseBody) => {
         log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
@@ -132,6 +128,7 @@ async function getResourcesList(
           url: response.url(),
           size: responseBody.byteLength,
           digest: createHash('sha256').update(responseBody).digest('hex'),
+          resourceType,
         });
       },
       (err) => {
@@ -169,8 +166,8 @@ async function getResourcesList(
 
   const result: OutputBodyType = {
     timestamp: Math.floor(Date.now() / 1000),
-    scripts: { external: [], inline: [] },
-    styles: { external: [], inline: [] },
+    scripts: [],
+    styles: [],
   };
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
@@ -183,33 +180,70 @@ async function getResourcesList(
           .join('');
       }
 
-      const scripts: OutputBodyType['scripts'] = { external: [], inline: [] };
+      async function parseURL(url: string): Promise<{ url: string; extractedContent: string }> {
+        if (url.startsWith('data:')) {
+          // For `data:` URLs we should replace the actual content with `[REDACTED]` as it might be huge.
+          return { url: url.split(',')[0] + ',[REDACTED]', extractedContent: url };
+        }
+
+        if (url.startsWith('blob:')) {
+          // For `blob:` URLs we should fetch the actual content and replace object reference with `[REDACTED]`.
+          return { url: 'blob:[REDACTED]', extractedContent: await (await fetch(url)).text() };
+        }
+
+        return { url, extractedContent: '' };
+      }
+
+      function isResourceValid(resource: Resource) {
+        return resource.url || resource.digest || resource.size;
+      }
+
+      const scripts: Resource[] = [];
       for (const el of Array.from(targetWindow.document.querySelectorAll('script'))) {
-        const url = el.src.trim();
-        if (url) {
-          scripts.external.push({ url });
-        } else {
-          const contentBlob = new Blob([el.innerHTML]);
-          scripts.inline.push({
-            digest: contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '',
-            size: contentBlob.size,
-          });
+        // We treat script content as a concatenation of `onload` handler and its inner content. For our purposes it
+        // doesn't matter if the script is loaded from an external source or is inline. If later we figure out that
+        // script content was also loaded from the external source (e.g. when `script` element has both `src` and
+        // `innerHTML`) we'll re-calculate its digest and size.
+        const { url, extractedContent } = await parseURL(el.src.trim());
+
+        const scriptResource: Resource = url ? { url } : {};
+        const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + extractedContent;
+        if (scriptContent) {
+          const contentBlob = new Blob([scriptContent]);
+          scriptResource.digest = contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '';
+          scriptResource.size = contentBlob.size;
+        }
+
+        if (isResourceValid(scriptResource)) {
+          scripts.push(scriptResource);
         }
       }
 
-      const styles: OutputBodyType['styles'] = {
-        external: Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]')).map((el) => ({
-          url: (el as HTMLLinkElement).href.trim(),
-        })),
-        inline: [],
-      };
+      const styles: Resource[] = [];
+      for (const el of Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]'))) {
+        const { url, extractedContent } = await parseURL((el as HTMLLinkElement).href.trim());
+
+        const styleResource: Resource = url ? { url } : {};
+        const styleContent = extractedContent;
+        if (styleContent) {
+          const contentBlob = new Blob([styleContent]);
+          styleResource.digest = contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '';
+          styleResource.size = contentBlob.size;
+        }
+
+        if (isResourceValid(styleResource)) {
+          styles.push(styleResource);
+        }
+      }
 
       for (const el of Array.from(targetWindow.document.querySelectorAll('style'))) {
         const contentBlob = new Blob([el.innerHTML]);
-        styles.inline.push({
-          digest: contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '',
-          size: contentBlob.size,
-        });
+        if (contentBlob.size > 0) {
+          styles.push({
+            digest: await calculateDigestHex(contentBlob),
+            size: contentBlob.size,
+          });
+        }
       }
 
       return { scripts, styles };
@@ -219,19 +253,50 @@ async function getResourcesList(
     result.styles = styles;
 
     log.debug(
-      `Found the following resources for page "${url}": ` +
-        `external scripts - ${scripts.external.length}, inline scripts - ${scripts.inline.length}, ` +
-        `external styles - ${styles.external.length}, inline styles - ${styles.inline.length}.`,
+      `Found the following resources for page "${url}": ` + `scripts - ${scripts.length}, styles - ${styles.length}.`,
     );
   } catch (err) {
     log.error(`Failed to extract resources for page "${url}: ${Diagnostics.errorMessage(err)}`);
     throw err;
   }
 
-  const enhanceResourceMeta = (resource: ExternalResource) => {
+  const enhanceResourceMeta = (resource: Resource) => {
+    if (!resource.url) {
+      return resource;
+    }
+
     const externalResourceData = externalResources.get(resource.url);
-    return !externalResourceData ? resource : { ...resource, ...externalResourceData };
+    if (!externalResourceData) {
+      return resource;
+    }
+    externalResources.delete(resource.url);
+
+    const digest =
+      resource.digest && externalResourceData.digest
+        ? createHash('sha256').update(resource.digest).update(externalResourceData.digest).digest('hex')
+        : resource.digest || externalResourceData.digest;
+
+    return {
+      ...resource,
+      digest,
+      size: (resource.size ?? 0) + (externalResourceData.size ?? 0),
+    };
   };
+
+  log.debug(`Fetched ${externalResources.size} external resources.`);
+
+  const scripts = result.scripts.map(enhanceResourceMeta);
+  const styles = result.styles.map(enhanceResourceMeta);
+
+  // Add remaining resources that browser recognized but we didn't extract.
+  for (const externalResource of externalResources.values()) {
+    const resourceCollection = externalResource.resourceType === 'stylesheet' ? styles : scripts;
+    resourceCollection.push({
+      url: externalResource.url,
+      digest: externalResource.digest,
+      size: externalResource.size,
+    });
+  }
 
   try {
     await page.close();
@@ -240,11 +305,5 @@ async function getResourcesList(
     log.error(`Failed to close page "${url}": ${Diagnostics.errorMessage(err)}`);
   }
 
-  // Replace external resources with additional data.
-  log.debug(`Fetched ${externalResources.size} external resources.`);
-  return {
-    ...result,
-    scripts: { ...result.scripts, external: result.scripts.external.map(enhanceResourceMeta) },
-    styles: { ...result.styles, external: result.styles.external.map(enhanceResourceMeta) },
-  };
+  return { ...result, scripts, styles };
 }
