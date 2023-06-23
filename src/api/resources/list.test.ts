@@ -19,6 +19,7 @@ await test('[/api/resources] can parse resources', async (t) => {
       const blobScript = new Blob(['alert(3)']);
       return [
         { src: 'https://secutils.dev/script.js', innerHTML: '' },
+        { src: 'https://secutils.dev/script.js', innerHTML: '' },
         { src: '', innerHTML: 'alert(1)' },
         { src: 'data:text/javascript;base64,YWxlcnQoMSk=', onload: { toString: () => 'alert(2)' }, innerHTML: '' },
         { src: 'https://secutils.dev/weird-script.js', innerHTML: 'alert(1)' },
@@ -72,6 +73,11 @@ await test('[/api/resources] can parse resources', async (t) => {
     JSON.stringify({
       timestamp: 123,
       scripts: [
+        {
+          url: 'https://secutils.dev/script.js',
+          digest: '5f483264496cf1440c6ef569cc4fb9785d3bed896efdadfc998e9cb1badcec81',
+          size: 9,
+        },
         {
           url: 'https://secutils.dev/script.js',
           digest: '5f483264496cf1440c6ef569cc4fb9785d3bed896efdadfc998e9cb1badcec81',

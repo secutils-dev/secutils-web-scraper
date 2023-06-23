@@ -109,7 +109,7 @@ async function getResourcesList(
 ): Promise<OutputBodyType> {
   const page = await browser.newPage();
 
-  const externalResources = new Map<string, Resource & { resourceType: 'script' | 'stylesheet' }>();
+  const externalResources = new Map<string, Resource & { resourceType: 'script' | 'stylesheet'; processed: boolean }>();
   page.on('response', (response) => {
     const request = response.request();
     const resourceType = request.resourceType() as 'script' | 'stylesheet';
@@ -129,6 +129,7 @@ async function getResourcesList(
           size: responseBody.byteLength,
           digest: createHash('sha256').update(responseBody).digest('hex'),
           resourceType,
+          processed: false,
         });
       },
       (err) => {
@@ -269,7 +270,11 @@ async function getResourcesList(
     if (!externalResourceData) {
       return resource;
     }
-    externalResources.delete(resource.url);
+
+    // Mark external resource as processed to not include it in the final output more than needed.
+    if (!externalResourceData.processed) {
+      externalResources.set(resource.url, { ...externalResourceData, processed: true });
+    }
 
     const digest =
       resource.digest && externalResourceData.digest
@@ -288,14 +293,16 @@ async function getResourcesList(
   const scripts = result.scripts.map(enhanceResourceMeta);
   const styles = result.styles.map(enhanceResourceMeta);
 
-  // Add remaining resources that browser recognized but we didn't extract.
+  // Add remaining resources that browser fetched, but we didn't process.
   for (const externalResource of externalResources.values()) {
-    const resourceCollection = externalResource.resourceType === 'stylesheet' ? styles : scripts;
-    resourceCollection.push({
-      url: externalResource.url,
-      digest: externalResource.digest,
-      size: externalResource.size,
-    });
+    if (!externalResource.processed) {
+      const resourceCollection = externalResource.resourceType === 'stylesheet' ? styles : scripts;
+      resourceCollection.push({
+        url: externalResource.url,
+        digest: externalResource.digest,
+        size: externalResource.size,
+      });
+    }
   }
 
   try {
