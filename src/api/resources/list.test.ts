@@ -75,41 +75,41 @@ await test('[/api/resources] can parse resources', async (t) => {
       scripts: [
         {
           url: 'https://secutils.dev/script.js',
-          content: { digest: '5f483264496cf1440c6ef569cc4fb9785d3bed896efdadfc998e9cb1badcec81', size: 9 },
+          content: { digest: '754e8afdb33e180fbb7311eba784c5416766aa1c', size: 9 },
         },
         {
           url: 'https://secutils.dev/script.js',
-          content: { digest: '5f483264496cf1440c6ef569cc4fb9785d3bed896efdadfc998e9cb1badcec81', size: 9 },
+          content: { digest: '754e8afdb33e180fbb7311eba784c5416766aa1c', size: 9 },
         },
-        { content: { digest: '6e11c72f7cf6bc383152dd16ddd5903aba6bb1c99d6b6639a4bb0b838185fa92', size: 8 } },
+        { content: { digest: '298a37c7d040603383d817c7132c1873c3f821fb', size: 8 } },
         {
-          url: 'data:text/javascript;base64,[REDACTED]',
-          content: { digest: 'cb86bcc6aefcf05fcf5e888fde6bceba2641673b7484e4ecfcb901fbc53bb5af', size: 48 },
+          url: 'data:text/javascript;base64,[d75d7677ffcb4b642dcacad3bc13e5e1bbe41e51]',
+          content: { digest: 'd75d7677ffcb4b642dcacad3bc13e5e1bbe41e51', size: 48 },
         },
         {
           url: 'https://secutils.dev/weird-script.js',
-          content: { digest: 'a9cf14e70f4640f8e2e9a9742c70d903ab145e32e1693d1f9c389550aec373c6', size: 23 },
+          content: { digest: 'c04795a6ebe7013a6583eea630ca992314ad79ee', size: 23 },
         },
         {
-          url: 'blob:[REDACTED]',
-          content: { digest: 'e48b3488eae9d0e229cbe34f48e40d8aaf48f90561d7b4f8839d11315511848f', size: 8 },
+          url: 'blob:[3e6cc9a3d3b72c8ced3d458fca03fde463c2fa83]',
+          content: { digest: '3e6cc9a3d3b72c8ced3d458fca03fde463c2fa83', size: 8 },
         },
       ],
       styles: [
         { url: 'https://secutils.dev/style.css' },
         {
           url: 'https://secutils.dev/fonts.css',
-          content: { digest: '4bf5d080989904bed2dfeb753a25567e4080d3f77d03fe6a1c67b5dc55e9f19f', size: 18 },
+          content: { digest: '11b4153e247dda8ef333a1e1ad46227b011dc46e', size: 18 },
         },
         {
-          url: 'data:text/css,[REDACTED]',
-          content: { digest: '718f9d008b611fbf592cf44a9155efa3c9ffdc6c220dcd7f4299f2b1e4242096', size: 45 },
+          url: 'data:text/css,[642568ff95ead504d599e474e2daec38f394cb47]',
+          content: { digest: '642568ff95ead504d599e474e2daec38f394cb47', size: 45 },
         },
         {
-          url: 'blob:[REDACTED]',
-          content: { digest: '5b5e7029fdc58ffc4970ddd785f6946e57040dc383a9d6a4b4cd46fb6059515a', size: 17 },
+          url: 'blob:[17dba57420ea2116bb5f58896908f16a3968cb97]',
+          content: { digest: '17dba57420ea2116bb5f58896908f16a3968cb97', size: 17 },
         },
-        { content: { digest: '678e77d012a42a2dd2c117bd49bc203e0bd82fad960a5d861ccc8f491bd262d2', size: 19 } },
+        { content: { digest: '3e9704995f77e96cc14ad4bc9320d2e108f7efc1', size: 19 } },
       ],
     }),
   );

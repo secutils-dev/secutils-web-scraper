@@ -137,7 +137,7 @@ async function getResourcesList(
           url: response.url(),
           content:
             responseBody.byteLength > 0
-              ? { size: responseBody.byteLength, digest: createHash('sha256').update(responseBody).digest('hex') }
+              ? { size: responseBody.byteLength, digest: createHash('sha1').update(responseBody).digest('hex') }
               : undefined,
           resourceType,
           processed: false,
@@ -186,7 +186,7 @@ async function getResourcesList(
     const targetWindow = await page.evaluateHandle<Window>('window');
     const { scripts, styles } = await page.evaluate(async (targetWindow) => {
       async function calculateDigestHex(contentBlob: Blob) {
-        const hashBuffer = await crypto.subtle.digest('SHA-256', await contentBlob.arrayBuffer());
+        const hashBuffer = await crypto.subtle.digest('SHA-1', await contentBlob.arrayBuffer());
         return Array.from(new Uint8Array(hashBuffer))
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('');
@@ -194,13 +194,13 @@ async function getResourcesList(
 
       async function parseURL(url: string): Promise<{ url: string; extractedContent: string }> {
         if (url.startsWith('data:')) {
-          // For `data:` URLs we should replace the actual content with `[REDACTED]` as it might be huge.
-          return { url: url.split(',')[0] + ',[REDACTED]', extractedContent: url };
+          // For `data:` URLs we should replace the actual content the digest later.
+          return { url: `${url.split(',')[0]},`, extractedContent: url };
         }
 
         if (url.startsWith('blob:')) {
-          // For `blob:` URLs we should fetch the actual content and replace object reference with `[REDACTED]`.
-          return { url: 'blob:[REDACTED]', extractedContent: await (await fetch(url)).text() };
+          // For `blob:` URLs we should fetch the actual content and replace object reference with the digest later.
+          return { url: 'blob:', extractedContent: await (await fetch(url)).text() };
         }
 
         return { url, extractedContent: '' };
@@ -276,7 +276,10 @@ async function getResourcesList(
 
     const externalResourceData = externalResources.get(resource.url);
     if (!externalResourceData) {
-      return resource;
+      // For data:/blob: URLs we should replace the actual content the digest.
+      return resource.url.startsWith('data:') || resource.url.startsWith('blob:')
+        ? { ...resource, url: `${resource.url}[${resource.content?.digest ?? ''}]` }
+        : resource;
     }
 
     // Mark external resource as processed to not include it in the final output more than needed.
@@ -290,7 +293,7 @@ async function getResourcesList(
         // Cast to `string` as we know that at least
         digest:
           resource.content && externalResourceData.content
-            ? createHash('sha256')
+            ? createHash('sha1')
                 .update(resource.content.digest)
                 .update(externalResourceData.content.digest)
                 .digest('hex')

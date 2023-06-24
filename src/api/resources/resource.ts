@@ -18,7 +18,7 @@ export interface Resource {
  */
 export interface ResourceContent {
   /**
-   * SHA256 digest of the external resource content, if available.
+   * SHA1 digest of the external resource content, if available.
    */
   digest: string;
 
