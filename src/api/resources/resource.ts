@@ -8,12 +8,22 @@ export interface Resource {
   url?: string;
 
   /**
+   * Resource content descriptor (size and digest), if available.
+   */
+  content?: ResourceContent;
+}
+
+/**
+ * Describes resource content.
+ */
+export interface ResourceContent {
+  /**
    * SHA256 digest of the external resource content, if available.
    */
-  digest?: string;
+  digest: string;
 
   /**
    * Size of the inline resource content, if available, in bytes.
    */
-  size?: number;
+  size: number;
 }

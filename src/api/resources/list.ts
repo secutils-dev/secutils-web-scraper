@@ -56,7 +56,16 @@ const RESOURCES_SCHEMA = {
   type: 'array',
   items: {
     type: 'object',
-    properties: { url: { type: 'string' }, digest: { type: 'string' }, size: { type: 'number' } },
+    properties: {
+      url: { type: 'string' },
+      content: {
+        type: 'object',
+        properties: {
+          digest: { type: 'string' },
+          size: { type: 'number' },
+        },
+      },
+    },
   },
 };
 
@@ -126,8 +135,10 @@ async function getResourcesList(
         log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
         externalResources.set(response.url(), {
           url: response.url(),
-          size: responseBody.byteLength,
-          digest: createHash('sha256').update(responseBody).digest('hex'),
+          content:
+            responseBody.byteLength > 0
+              ? { size: responseBody.byteLength, digest: createHash('sha256').update(responseBody).digest('hex') }
+              : undefined,
           resourceType,
           processed: false,
         });
@@ -196,7 +207,7 @@ async function getResourcesList(
       }
 
       function isResourceValid(resource: Resource) {
-        return resource.url || resource.digest || resource.size;
+        return !!(resource.url || resource.content);
       }
 
       const scripts: Resource[] = [];
@@ -211,8 +222,7 @@ async function getResourcesList(
         const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + extractedContent;
         if (scriptContent) {
           const contentBlob = new Blob([scriptContent]);
-          scriptResource.digest = contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '';
-          scriptResource.size = contentBlob.size;
+          scriptResource.content = { digest: await calculateDigestHex(contentBlob), size: contentBlob.size };
         }
 
         if (isResourceValid(scriptResource)) {
@@ -228,8 +238,7 @@ async function getResourcesList(
         const styleContent = extractedContent;
         if (styleContent) {
           const contentBlob = new Blob([styleContent]);
-          styleResource.digest = contentBlob.size > 0 ? await calculateDigestHex(contentBlob) : '';
-          styleResource.size = contentBlob.size;
+          styleResource.content = { digest: await calculateDigestHex(contentBlob), size: contentBlob.size };
         }
 
         if (isResourceValid(styleResource)) {
@@ -241,8 +250,7 @@ async function getResourcesList(
         const contentBlob = new Blob([el.innerHTML]);
         if (contentBlob.size > 0) {
           styles.push({
-            digest: await calculateDigestHex(contentBlob),
-            size: contentBlob.size,
+            content: { digest: await calculateDigestHex(contentBlob), size: contentBlob.size },
           });
         }
       }
@@ -276,16 +284,24 @@ async function getResourcesList(
       externalResources.set(resource.url, { ...externalResourceData, processed: true });
     }
 
-    const digest =
-      resource.digest && externalResourceData.digest
-        ? createHash('sha256').update(resource.digest).update(externalResourceData.digest).digest('hex')
-        : resource.digest || externalResourceData.digest;
+    let content;
+    if (resource.content || externalResourceData.content) {
+      content = {
+        // Cast to `string` as we know that at least
+        digest:
+          resource.content && externalResourceData.content
+            ? createHash('sha256')
+                .update(resource.content.digest)
+                .update(externalResourceData.content.digest)
+                .digest('hex')
+            : ((resource.content?.digest || externalResourceData.content?.digest) as string),
+        size: (resource.content?.size ?? 0) + (externalResourceData.content?.size ?? 0),
+      };
 
-    return {
-      ...resource,
-      digest,
-      size: (resource.size ?? 0) + (externalResourceData.size ?? 0),
-    };
+      return { ...resource, content };
+    }
+
+    return resource;
   };
 
   log.debug(`Fetched ${externalResources.size} external resources.`);
@@ -297,11 +313,11 @@ async function getResourcesList(
   for (const externalResource of externalResources.values()) {
     if (!externalResource.processed) {
       const resourceCollection = externalResource.resourceType === 'stylesheet' ? styles : scripts;
-      resourceCollection.push({
-        url: externalResource.url,
-        digest: externalResource.digest,
-        size: externalResource.size,
-      });
+      resourceCollection.push(
+        externalResource.content
+          ? { url: externalResource.url, content: externalResource.content }
+          : { url: externalResource.url },
+      );
     }
   }
 
