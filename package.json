@@ -19,9 +19,9 @@
     "test:watch": "NODE_NO_WARNINGS=1 NODE_OPTIONS= node --loader=ts-node/esm --test --watch ./src/tests.ts"
   },
   "dependencies": {
+    "@fastify/compress": "^6.4.0",
     "dotenv": "^16.3.1",
     "fastify": "^4.19.1",
-    "@fastify/compress": "^6.4.0",
     "node-cache": "^5.1.2",
     "playwright": "1.34.3"
   },

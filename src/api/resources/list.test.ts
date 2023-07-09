@@ -16,12 +16,18 @@ await test('[/api/resources] can parse resources', async (t) => {
   const windowMock = createWindowMock();
   windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
     if (selector === 'script') {
-      const blobScript = new Blob(['alert(3)']);
+      const blobScript = new Blob(['console.log(1);alert(2);alert(3);alert(4);alert(5);console.log(6);']);
       return [
         { src: 'https://secutils.dev/script.js', innerHTML: '' },
         { src: 'https://secutils.dev/script.js', innerHTML: '' },
+        { src: '', innerHTML: 'alert(1);alert(2);alert(3);alert(4);alert(5);console.log(6);' },
         { src: '', innerHTML: 'alert(1)' },
-        { src: 'data:text/javascript;base64,YWxlcnQoMSk=', onload: { toString: () => 'alert(2)' }, innerHTML: '' },
+        { src: '', innerHTML: 'alert(1)'.repeat(33) },
+        {
+          src: 'data:text/javascript;base64,YWxlcnQoMSk7YWxlcnQoMik7YWxlcnQoMyk7YWxlcnQoNCk7YWxlcnQoNSk7Y29uc29sZS5sb2coNik7',
+          onload: { toString: () => 'alert(2)' },
+          innerHTML: '',
+        },
         { src: 'https://secutils.dev/weird-script.js', innerHTML: 'alert(1)' },
         // @ts-expect-error: Conflicting types with DOM.
         { src: URL.createObjectURL(blobScript), innerHTML: '' },
@@ -29,18 +35,22 @@ await test('[/api/resources] can parse resources', async (t) => {
     }
 
     if (selector === 'link[rel=stylesheet]') {
-      const blobStyle = new Blob(['* { color: blue }']);
+      const blobStyle = new Blob(['body { background-color: blue } div { color: red }']);
       return [
         { href: 'https://secutils.dev/style.css' },
         { href: 'https://secutils.dev/fonts.css' },
-        { href: 'data:text/css, body { background-color: red }' },
+        { href: 'data:text/css, body { background-color: red } div { color: green }' },
         // @ts-expect-error: Conflicting types with DOM.
         { href: URL.createObjectURL(blobStyle) },
       ];
     }
 
     if (selector === 'style') {
-      return [{ innerHTML: '* { color: black; }' }];
+      return [
+        { innerHTML: '* { color: black; background-color: white; font-size: 100; }' },
+        { innerHTML: `* { ${'a'.repeat(50)} }` },
+        { innerHTML: `* {}` },
+      ];
     }
 
     return [];
@@ -49,15 +59,19 @@ await test('[/api/resources] can parse resources', async (t) => {
   const pageMock = createPageMock({
     window: windowMock,
     responses: [
-      createResponseMock({ url: 'https://secutils.dev/script.js', body: 'some body', resourceType: 'script' }),
+      createResponseMock({
+        url: 'https://secutils.dev/script.js',
+        body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+        resourceType: 'script',
+      }),
       createResponseMock({
         url: 'https://secutils.dev/weird-script.js',
-        body: 'some weird body',
+        body: `window.document.body.innerHTML = "Hello Secutils.dev and world!";`,
         resourceType: 'script',
       }),
       createResponseMock({
         url: 'https://secutils.dev/fonts.css',
-        body: '* { color: blue; }',
+        body: '* { color: blue-ish-not-valid; font-size: 100500; }',
         resourceType: 'stylesheet',
       }),
     ],
@@ -68,6 +82,9 @@ await test('[/api/resources] can parse resources', async (t) => {
     url: '/api/resources',
     payload: { url: 'https://secutils.dev', delay: 0 },
   });
+
+  assert.strictEqual(response.statusCode, 200);
+
   assert.strictEqual(
     response.body,
     JSON.stringify({
@@ -75,45 +92,102 @@ await test('[/api/resources] can parse resources', async (t) => {
       scripts: [
         {
           url: 'https://secutils.dev/script.js',
-          content: { digest: '754e8afdb33e180fbb7311eba784c5416766aa1c', size: 9 },
+          content: {
+            data: { type: 'tlsh', value: 'T156A002B39256197413252E602EA57AC67D66540474113459D79DB004B1608C7C8EEEDD' },
+            size: 65,
+          },
         },
         {
           url: 'https://secutils.dev/script.js',
-          content: { digest: '754e8afdb33e180fbb7311eba784c5416766aa1c', size: 9 },
+          content: {
+            data: { type: 'tlsh', value: 'T156A002B39256197413252E602EA57AC67D66540474113459D79DB004B1608C7C8EEEDD' },
+            size: 65,
+          },
         },
-        { content: { digest: '298a37c7d040603383d817c7132c1873c3f821fb', size: 8 } },
         {
-          url: 'data:text/javascript;base64,[d75d7677ffcb4b642dcacad3bc13e5e1bbe41e51]',
-          content: { digest: 'd75d7677ffcb4b642dcacad3bc13e5e1bbe41e51', size: 48 },
+          content: {
+            data: { type: 'tlsh', value: 'T172A0021519C40C242F86775C090C100124801A5170435C46500D52FE00557F2807D114' },
+            size: 60,
+          },
+        },
+        {
+          content: {
+            data: { type: 'raw', value: 'alert(1)' },
+            size: 8,
+          },
+        },
+        {
+          content: {
+            data: { type: 'sha1', value: 'eeb57986d46355a4ccfab37c3071f40e2b14ab07' },
+            size: 264,
+          },
+        },
+        {
+          url: 'data:text/javascript;base64,[T1B7B0920E581F5C01C2C0128830FCB23897382835A00C4A57783C7BD4344CA70280F388]',
+          content: {
+            data: { type: 'tlsh', value: 'T1B7B0920E581F5C01C2C0128830FCB23897382835A00C4A57783C7BD4344CA70280F388' },
+            size: 116,
+          },
         },
         {
           url: 'https://secutils.dev/weird-script.js',
-          content: { digest: 'c04795a6ebe7013a6583eea630ca992314ad79ee', size: 23 },
+          content: {
+            data: { type: 'tlsh', value: 'T196A022F3A2020E3003222F202EA83AC23C2200083020300AC38CF000B0308C3C8EEECC' },
+            size: 73,
+          },
         },
         {
-          url: 'blob:[3e6cc9a3d3b72c8ced3d458fca03fde463c2fa83]',
-          content: { digest: '3e6cc9a3d3b72c8ced3d458fca03fde463c2fa83', size: 8 },
+          url: 'blob:[T1D8A002151DC80C343F85775C0D0C500234801F55B0836C45600D17FF0095FF284BD128]',
+          content: {
+            data: { type: 'tlsh', value: 'T1D8A002151DC80C343F85775C0D0C500234801F55B0836C45600D17FF0095FF284BD128' },
+            size: 66,
+          },
         },
       ],
       styles: [
         { url: 'https://secutils.dev/style.css' },
         {
           url: 'https://secutils.dev/fonts.css',
-          content: { digest: '11b4153e247dda8ef333a1e1ad46227b011dc46e', size: 18 },
+          content: {
+            data: { type: 'tlsh', value: 'T19590220E23308028C000888020033280308C008300000328208008C0808CCE02200B00' },
+            size: 51,
+          },
         },
         {
-          url: 'data:text/css,[642568ff95ead504d599e474e2daec38f394cb47]',
-          content: { digest: '642568ff95ead504d599e474e2daec38f394cb47', size: 45 },
+          url: 'data:text/css,[T110A02222C3020C0330CB800FA0B2800B8A32088880382FE83C38C02C020E00020238FA]',
+          content: {
+            data: { type: 'tlsh', value: 'T110A02222C3020C0330CB800FA0B2800B8A32088880382FE83C38C02C020E00020238FA' },
+            size: 66,
+          },
         },
         {
-          url: 'blob:[17dba57420ea2116bb5f58896908f16a3968cb97]',
-          content: { digest: '17dba57420ea2116bb5f58896908f16a3968cb97', size: 17 },
+          url: 'blob:[T19F900206CA51495B759B81595461850B423A11C954786B18786A55980615454A1224F1]',
+          content: {
+            data: { type: 'tlsh', value: 'T19F900206CA51495B759B81595461850B423A11C954786B18786A55980615454A1224F1' },
+            size: 50,
+          },
         },
-        { content: { digest: '3e9704995f77e96cc14ad4bc9320d2e108f7efc1', size: 19 } },
+        {
+          content: {
+            data: { type: 'tlsh', value: 'T13DA0021ADB65454A32DF5A68356397A0526D548889104B7C3D5EB894D74C0617112791' },
+            size: 60,
+          },
+        },
+        {
+          content: {
+            data: { type: 'raw', value: '* { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa }' },
+            size: 56,
+          },
+        },
+        {
+          content: {
+            data: { type: 'raw', value: '* {}' },
+            size: 4,
+          },
+        },
       ],
     }),
   );
-  assert.strictEqual(response.statusCode, 200);
 
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);

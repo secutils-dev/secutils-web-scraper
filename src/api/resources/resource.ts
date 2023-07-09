@@ -18,12 +18,21 @@ export interface Resource {
  */
 export interface ResourceContent {
   /**
-   * SHA1 digest of the external resource content, if available.
+   * Resource content data.
    */
-  digest: string;
+  data: ResourceContentData;
 
   /**
    * Size of the inline resource content, if available, in bytes.
    */
   size: number;
+}
+
+/**
+ * Describes resource content data, it can either be the raw content data or a hash such as Trend Micro Locality
+ * Sensitive Hash or simple SHA-1.
+ */
+export interface ResourceContentData {
+  type: 'raw' | 'tlsh' | 'sha1';
+  value: string;
 }
