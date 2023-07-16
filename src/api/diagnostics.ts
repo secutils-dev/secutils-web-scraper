@@ -38,7 +38,7 @@ export class Diagnostics {
     }
 
     if (err && typeof err === 'object') {
-      return (err as { message?: string }).message ?? err.toString();
+      return (err as { message?: string }).message ?? 'Unknown error';
     }
 
     return 'UNKNOWN';
