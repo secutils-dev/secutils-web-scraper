@@ -28,7 +28,9 @@ async function runBrowser(serverInstance: FastifyInstance) {
     const browserToRun = await chromium.launch({
       executablePath: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH || undefined,
       // defaultViewport: { width: 1600, height: 1200 },
-      args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      args: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS
+        ? process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS.split(',')
+        : ['--no-sandbox', '--disable-dev-shm-usage'],
       // ignoreHTTPSErrors: true,
       headless,
     });
