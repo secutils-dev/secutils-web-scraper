@@ -19,4 +19,5 @@ RUN set -x && apk update --no-cache && \
     apk add --no-cache dumb-init nss freetype harfbuzz ca-certificates ttf-freefont chromium
 COPY --from=BUILDER ["/app/dist", "/app/package.json", "/app/yarn.lock", "./"]
 RUN set -x && yarn install --production --frozen-lockfile && yarn cache clean
+USER node
 CMD [ "node", "src/index.js" ]

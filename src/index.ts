@@ -23,23 +23,19 @@ const server = fastify({ logger: { level: process.env.SECUTILS_WEB_SCRAPER_LOG_L
 
 async function runBrowser(serverInstance: FastifyInstance) {
   const headless = true;
-  const args = process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS
-    ? process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS.split(',')
-    : ['--no-sandbox', '--disable-dev-shm-usage'];
-  serverInstance.log.info(`Running browser (headless: ${headless.toString()}, args: ${JSON.stringify(args)})...`);
+  const chromiumSandbox = !(process.env.SECUTILS_WEB_SCRAPER_BROWSER_NO_SANDBOX === 'true');
+  serverInstance.log.info(`Running browser (headless: ${headless}, sandbox: ${chromiumSandbox})...`);
   try {
     const browserToRun = await chromium.launch({
       executablePath: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH || undefined,
-      // defaultViewport: { width: 1600, height: 1200 },
-      args,
-      // ignoreHTTPSErrors: true,
       headless,
+      chromiumSandbox,
     });
-    serverInstance.log.info(`Successfully run browser (headless: ${headless.toString()}).`);
+    serverInstance.log.info(`Successfully run browser (headless: ${headless}, sandbox: ${chromiumSandbox}).`);
     return browserToRun;
   } catch (err) {
     serverInstance.log.error(
-      `Failed to run browser (headless: ${headless.toString()}): ${Diagnostics.errorMessage(err)}`,
+      `Failed to run browser (headless: ${headless}, sandbox: ${chromiumSandbox}): ${Diagnostics.errorMessage(err)}`,
     );
     throw err;
   }
