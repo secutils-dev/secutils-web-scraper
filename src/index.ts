@@ -23,14 +23,15 @@ const server = fastify({ logger: { level: process.env.SECUTILS_WEB_SCRAPER_LOG_L
 
 async function runBrowser(serverInstance: FastifyInstance) {
   const headless = true;
-  serverInstance.log.info(`Running browser (headless: ${headless.toString()})...`);
+  const args = process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS
+    ? process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS.split(',')
+    : ['--no-sandbox', '--disable-dev-shm-usage'];
+  serverInstance.log.info(`Running browser (headless: ${headless.toString()}, args: ${JSON.stringify(args)})...`);
   try {
     const browserToRun = await chromium.launch({
       executablePath: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH || undefined,
       // defaultViewport: { width: 1600, height: 1200 },
-      args: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS
-        ? process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_ARGS.split(',')
-        : ['--no-sandbox', '--disable-dev-shm-usage'],
+      args,
       // ignoreHTTPSErrors: true,
       headless,
     });
