@@ -2,6 +2,8 @@ import { mock } from 'node:test';
 
 import type { Browser } from 'playwright';
 
+import type { SecutilsWindow } from './api/resources/index.js';
+
 export function createBrowserMock(pageMock?: ReturnType<typeof createPageMock>) {
   return {
     newPage: mock.fn(() => pageMock ?? createPageMock()),
@@ -24,17 +26,18 @@ export function createPageMock({ window = createWindowMock(), responses = [] }: 
     close: mock.fn(),
     goto: mock.fn(),
     waitForSelector: mock.fn(),
-    evaluateHandle: mock.fn(),
-    evaluate: mock.fn((fn: (w: WindowMock) => Promise<unknown>) => fn(window)),
+    evaluateHandle: mock.fn(() => window),
+    evaluate: mock.fn((fn: (args: unknown) => Promise<unknown>, args: unknown) => fn(args)),
   };
 }
 
 export type WindowMock = ReturnType<typeof createWindowMock>;
-export function createWindowMock() {
+export function createWindowMock({ __secutils }: Pick<SecutilsWindow, '__secutils'> = {}) {
   return {
     document: {
       querySelectorAll: mock.fn(() => []),
     },
+    __secutils,
   };
 }
 

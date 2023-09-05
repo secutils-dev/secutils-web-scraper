@@ -1,7 +1,8 @@
 import * as assert from 'node:assert';
 import { Blob } from 'node:buffer';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 
+import type { ResourceWithRawData } from './list.js';
 import { registerResourcesListRoutes } from './list.js';
 import { createBrowserMock, createPageMock, createResponseMock, createWindowMock } from '../../mocks.js';
 import { createMock } from '../api_route_params.mocks.js';
@@ -198,4 +199,124 @@ await test('[/api/resources] can parse resources', async (t) => {
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
+});
+
+await test('[/api/resources] can inject resource filters', async (t) => {
+  t.mock.method(Date, 'now', () => 123000);
+
+  const includeResourceMock = mock.fn((resource: ResourceWithRawData) => !resource.rawData.includes('alert'));
+
+  const windowMock = createWindowMock({ __secutils: { includeResource: includeResourceMock } });
+  windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
+    if (selector === 'script') {
+      return [
+        { src: 'https://secutils.dev/script.js', innerHTML: '' },
+        { src: '', innerHTML: 'alert(1)'.repeat(10) },
+      ];
+    }
+
+    if (selector === 'link[rel=stylesheet]') {
+      return [{ href: 'https://secutils.dev/fonts.css' }];
+    }
+
+    if (selector === 'style') {
+      return [{ innerHTML: '* { color: black; background-color: white; font-size: 100; }' }];
+    }
+
+    return [];
+  });
+
+  const pageMock = createPageMock({
+    window: windowMock,
+    responses: [
+      createResponseMock({
+        url: 'https://secutils.dev/script.js',
+        body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+        resourceType: 'script',
+      }),
+      createResponseMock({
+        url: 'https://secutils.dev/fonts.css',
+        body: '* { color: blue-ish-not-valid; font-size: 100500; }',
+        resourceType: 'stylesheet',
+      }),
+    ],
+  });
+
+  const response = await registerResourcesListRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+    method: 'POST',
+    url: '/api/resources',
+    payload: { url: 'https://secutils.dev', delay: 0 },
+  });
+
+  assert.strictEqual(response.statusCode, 200);
+
+  assert.strictEqual(
+    response.body,
+    JSON.stringify({
+      timestamp: 123,
+      scripts: [
+        {
+          url: 'https://secutils.dev/script.js',
+          content: {
+            data: { type: 'tlsh', value: 'T156A002B39256197413252E602EA57AC67D66540474113459D79DB004B1608C7C8EEEDD' },
+            size: 65,
+          },
+        },
+      ],
+      styles: [
+        {
+          url: 'https://secutils.dev/fonts.css',
+          content: {
+            data: { type: 'tlsh', value: 'T19590220E23308028C000888020033280308C008300000328208008C0808CCE02200B00' },
+            size: 51,
+          },
+        },
+        {
+          content: {
+            data: { type: 'tlsh', value: 'T13DA0021ADB65454A32DF5A68356397A0526D548889104B7C3D5EB894D74C0617112791' },
+            size: 60,
+          },
+        },
+      ],
+    }),
+  );
+
+  // Make sure we loaded correct page.
+  assert.strictEqual(pageMock.goto.mock.callCount(), 1);
+  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, [
+    'https://secutils.dev',
+    { waitUntil: 'domcontentloaded', timeout: 5000 },
+  ]);
+
+  // Make sure we didn't wait for a selector since it wasn't specified.
+  assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
+
+  // Make sure we called includeResource.
+  assert.strictEqual(includeResourceMock.mock.callCount(), 4);
+  assert.deepEqual(includeResourceMock.mock.calls[0].arguments, [
+    {
+      rawData: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+      resourceType: 'script',
+      url: 'https://secutils.dev/script.js',
+    },
+  ]);
+  assert.deepEqual(includeResourceMock.mock.calls[1].arguments, [
+    {
+      rawData: 'alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)',
+      resourceType: 'script',
+    },
+  ]);
+  assert.deepEqual(includeResourceMock.mock.calls[2].arguments, [
+    {
+      rawData: '* { color: blue-ish-not-valid; font-size: 100500; }',
+      resourceType: 'stylesheet',
+      url: 'https://secutils.dev/fonts.css',
+    },
+  ]);
+  assert.deepEqual(includeResourceMock.mock.calls[3].arguments, [
+    {
+      rawData: '* { color: black; background-color: white; font-size: 100; }',
+      resourceType: 'stylesheet',
+    },
+  ]);
 });

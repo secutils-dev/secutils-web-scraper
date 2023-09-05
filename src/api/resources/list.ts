@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { setTimeout as setTimeoutAsync } from 'timers/promises';
 
 import type { FastifyBaseLogger } from 'fastify';
-import type { Browser } from 'playwright';
+import type { Browser, JSHandle } from 'playwright';
 
 import type { Resource, ResourceContent, ResourceContentData } from './resource.js';
 import type { APIRouteParams } from '../api_route_params.js';
@@ -42,6 +42,17 @@ interface InputBodyParamsType {
    * Optional CSS selector to wait for before extracting resources.
    */
   waitSelector?: string;
+
+  /**
+   * Optional list of scripts (content) to inject into the page before extracting resources.
+   */
+  scripts?: {
+    /**
+     * A content for a function that accepts a resource object and returns `true` if the resource should be tracked, or
+     * `false` if resource should be ignored.
+     */
+    includeResource?: string;
+  };
 }
 
 /**
@@ -53,10 +64,16 @@ interface OutputBodyType {
   styles: Resource[];
 }
 
-interface ResourceWithRawData {
+export interface ResourceWithRawData {
   url?: string;
   rawData: string;
   resourceType: 'script' | 'stylesheet';
+}
+
+export interface SecutilsWindow extends Window {
+  __secutils?: {
+    includeResource?: (resource: ResourceWithRawData) => boolean;
+  };
 }
 
 const RESOURCES_SCHEMA = {
@@ -82,7 +99,16 @@ export function registerResourcesListRoutes({ server, cache, acquireBrowser }: A
     '/api/resources',
     {
       schema: {
-        body: { url: { type: 'string' }, delay: { type: 'number' } },
+        body: {
+          url: { type: 'string' },
+          delay: { type: 'number' },
+          scripts: {
+            type: 'object',
+            properties: {
+              includeResource: { type: 'string' },
+            },
+          },
+        },
         response: {
           200: {
             type: 'object',
@@ -122,11 +148,29 @@ export function registerResourcesListRoutes({ server, cache, acquireBrowser }: A
 async function getResourcesList(
   browser: Browser,
   log: FastifyBaseLogger,
-  { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS }: InputBodyParamsType,
+  { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts }: InputBodyParamsType,
 ): Promise<OutputBodyType> {
   const page = await browser.newPage();
 
-  const externalResources = new Map<string, Omit<ResourceWithRawData, 'url'> & { url: string; processed: boolean }>();
+  // Inject custom scripts if any.
+  if (scripts?.includeResource) {
+    log.debug(`[${url}] Adding "includeResource" function: ${scripts.includeResource}.`);
+    await page.addInitScript({
+      content: `self.__secutils = { includeResource(resource) { ${scripts.includeResource} } }`,
+    });
+  }
+
+  page.on('console', (msg) => {
+    if (msg.text().startsWith('[browser]')) {
+      if (msg.type() === 'debug') {
+        log.debug(msg.text());
+      } else {
+        log.error(msg.text());
+      }
+    }
+  });
+
+  const externalResources: Array<Omit<ResourceWithRawData, 'url'> & { url: string; processed: boolean }> = [];
   page.on('response', (response) => {
     const request = response.request();
     const resourceType = request.resourceType() as 'script' | 'stylesheet';
@@ -141,7 +185,7 @@ async function getResourcesList(
     response.body().then(
       (responseBody) => {
         log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
-        externalResources.set(response.url(), {
+        externalResources.push({
           url: response.url(),
           rawData: responseBody.toString('utf-8'),
           resourceType,
@@ -187,121 +231,145 @@ async function getResourcesList(
   log.debug(`Delaying resource extraction for ${delay}ms.`);
   await setTimeoutAsync(delay);
 
-  const combineResourceWithExternalResource = (resource: ResourceWithRawData) => {
-    // Skip inline resources and resources that weren't fetched.
-    const externalResource = resource.url ? externalResources.get(resource.url) : undefined;
-    if (!externalResource) {
-      return resource;
-    }
-
-    // Mark external resource as processed to not include it in the final output more than needed.
-    if (!externalResource.processed) {
-      externalResources.set(externalResource.url, { ...externalResource, processed: true });
-    }
-
-    return { ...resource, rawData: resource.rawData + externalResource.rawData };
-  };
-
   let extractedResources: ResourceWithRawData[];
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
     const targetWindow = await page.evaluateHandle<Window>('window');
-    extractedResources = await page.evaluate(async (targetWindow) => {
-      async function parseURL(url: string): Promise<{ url: string; rawData: string }> {
-        if (url.startsWith('data:')) {
-          // For `data:` URLs we should replace the actual content the digest later.
-          return { url: `${url.split(',')[0]},`, rawData: url };
+    extractedResources = await page.evaluate(
+      async ([targetWindow, externalResources]) => {
+        async function parseURL(url: string): Promise<{ url: string; rawData: string }> {
+          if (url.startsWith('data:')) {
+            // For `data:` URLs we should replace the actual content the digest later.
+            return { url: `${url.split(',')[0]},`, rawData: url };
+          }
+
+          if (url.startsWith('blob:')) {
+            // For `blob:` URLs we should fetch the actual content and replace object reference with the digest later.
+            return {
+              url: 'blob:',
+              // [BUG] There is a bug in Node.js 20.4.0 that doesn't properly handle `await response.text()` in tests.
+              rawData: await fetch(url)
+                .then((res) => res.body?.getReader().read())
+                .then((res) => new TextDecoder().decode(res?.value)),
+            };
+          }
+
+          return { url, rawData: '' };
         }
 
-        if (url.startsWith('blob:')) {
-          // For `blob:` URLs we should fetch the actual content and replace object reference with the digest later.
-          return {
-            url: 'blob:',
-            // [BUG] There is a bug in Node.js 20.4.0 that doesn't properly handle `await response.text()` in tests.
-            rawData: await fetch(url)
-              .then((res) => res.body?.getReader().read())
-              .then((res) => new TextDecoder().decode(res?.value)),
-          };
+        function isResourceValid(resource: ResourceWithRawData) {
+          return !!(resource.url || resource.rawData);
         }
 
-        return { url, rawData: '' };
-      }
+        const resources: ResourceWithRawData[] = [];
+        for (const el of Array.from(targetWindow.document.querySelectorAll('script'))) {
+          // We treat script content as a concatenation of `onload` handler and its inner content. For our purposes it
+          // doesn't matter if the script is loaded from an external source or is inline. If later we figure out that
+          // script content was also loaded from the external source (e.g. when `script` element has both `src` and
+          // `innerHTML`) we'll re-calculate its digest and size.
+          const { url, rawData } = await parseURL(el.src.trim());
 
-      function isResourceValid(resource: ResourceWithRawData) {
-        return !!(resource.url || resource.rawData);
-      }
+          const scriptResource: ResourceWithRawData = url
+            ? { url, rawData, resourceType: 'script' }
+            : { rawData, resourceType: 'script' };
+          const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + rawData;
+          if (scriptContent) {
+            const contentBlob = new Blob([scriptContent]);
+            scriptResource.rawData = await contentBlob.text();
+          }
 
-      const resources: ResourceWithRawData[] = [];
-      for (const el of Array.from(targetWindow.document.querySelectorAll('script'))) {
-        // We treat script content as a concatenation of `onload` handler and its inner content. For our purposes it
-        // doesn't matter if the script is loaded from an external source or is inline. If later we figure out that
-        // script content was also loaded from the external source (e.g. when `script` element has both `src` and
-        // `innerHTML`) we'll re-calculate its digest and size.
-        const { url, rawData } = await parseURL(el.src.trim());
-
-        const scriptResource: ResourceWithRawData = url
-          ? { url, rawData, resourceType: 'script' }
-          : { rawData, resourceType: 'script' };
-        const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + rawData;
-        if (scriptContent) {
-          const contentBlob = new Blob([scriptContent]);
-          scriptResource.rawData = await contentBlob.text();
+          if (isResourceValid(scriptResource)) {
+            resources.push(scriptResource);
+          }
         }
 
-        if (isResourceValid(scriptResource)) {
-          resources.push(scriptResource);
+        for (const el of Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]'))) {
+          const { url, rawData } = await parseURL((el as HTMLLinkElement).href.trim());
+
+          const styleResource: ResourceWithRawData = url
+            ? { url, rawData, resourceType: 'stylesheet' }
+            : { rawData, resourceType: 'stylesheet' };
+          const styleContent = rawData;
+          if (styleContent) {
+            const contentBlob = new Blob([styleContent]);
+            styleResource.rawData = await contentBlob.text();
+          }
+
+          if (isResourceValid(styleResource)) {
+            resources.push(styleResource);
+          }
         }
-      }
 
-      for (const el of Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]'))) {
-        const { url, rawData } = await parseURL((el as HTMLLinkElement).href.trim());
-
-        const styleResource: ResourceWithRawData = url
-          ? { url, rawData, resourceType: 'stylesheet' }
-          : { rawData, resourceType: 'stylesheet' };
-        const styleContent = rawData;
-        if (styleContent) {
-          const contentBlob = new Blob([styleContent]);
-          styleResource.rawData = await contentBlob.text();
+        for (const el of Array.from(targetWindow.document.querySelectorAll('style'))) {
+          const contentBlob = new Blob([el.innerHTML]);
+          if (contentBlob.size > 0) {
+            resources.push({
+              resourceType: 'stylesheet',
+              rawData: await contentBlob.text(),
+            });
+          }
         }
 
-        if (isResourceValid(styleResource)) {
-          resources.push(styleResource);
-        }
-      }
+        // Some inline resources may also be loaded from external sources. We should combine them with the external.
+        const externalResourcesMap = new Map(externalResources.map((resource) => [resource.url, resource]));
+        const combinedResources = resources.map((resource: ResourceWithRawData) => {
+          // Skip inline resources and resources that weren't fetched.
+          const externalResource = resource.url ? externalResourcesMap.get(resource.url) : undefined;
+          if (!externalResource) {
+            return resource;
+          }
 
-      for (const el of Array.from(targetWindow.document.querySelectorAll('style'))) {
-        const contentBlob = new Blob([el.innerHTML]);
-        if (contentBlob.size > 0) {
-          resources.push({
-            resourceType: 'stylesheet',
-            rawData: await contentBlob.text(),
-          });
-        }
-      }
+          // Mark external resource as processed to not include it in the final output more than needed.
+          if (!externalResource.processed) {
+            externalResourcesMap.set(externalResource.url, { ...externalResource, processed: true });
+          }
 
-      return resources;
-    }, targetWindow);
+          return { ...resource, rawData: resource.rawData + externalResource.rawData };
+        });
+
+        // Add remaining resources that browser fetched, but we didn't process.
+        for (const externalResource of externalResourcesMap.values()) {
+          if (!externalResource.processed) {
+            combinedResources.push(externalResource);
+          }
+        }
+
+        const includeResource = targetWindow.__secutils?.includeResource;
+        if (includeResource && typeof includeResource !== 'function') {
+          console.error(`[browser] Invalid "includeResource" function: ${typeof includeResource}`);
+        } else if (includeResource) {
+          console.debug('[browser] Using custom "includeResource" function.');
+        }
+
+        try {
+          return typeof includeResource === 'function'
+            ? combinedResources.filter((resource) => {
+                const includeResourceResult = includeResource(resource);
+                if (!includeResourceResult) {
+                  console.debug(`[browser] Skipping resource: ${resource.url ?? '<inline>'}`);
+                }
+
+                return includeResourceResult;
+              })
+            : combinedResources;
+        } catch (err: unknown) {
+          console.error(
+            `[browser] Custom "includeResource" function has thrown an exception: ${(err as Error)?.message ?? err}.`,
+          );
+
+          throw err;
+        }
+      },
+      [targetWindow as JSHandle<SecutilsWindow>, externalResources] as const,
+    );
   } catch (err) {
     log.error(`Failed to extract resources for page "${url}: ${Diagnostics.errorMessage(err)}`);
     throw err;
   }
 
-  log.debug(
-    `Extracted ${extractedResources.length} resources for the page "${url}" (fetched: ${externalResources.size}).`,
-  );
+  log.debug(`Extracted ${extractedResources.length} resources for the page "${url}".`);
 
-  // Some inline resources may also be loaded from external sources. We should combine them with the external.
-  const combinedResources = extractedResources.map(combineResourceWithExternalResource);
-
-  // Add remaining resources that browser fetched, but we didn't process.
-  for (const externalResource of externalResources.values()) {
-    if (!externalResource.processed) {
-      combinedResources.push(externalResource);
-    }
-  }
-
-  for (const resourceWithRawData of combinedResources) {
+  for (const resourceWithRawData of extractedResources) {
     let content: ResourceContent | undefined = undefined;
     if (resourceWithRawData.rawData) {
       content = {
