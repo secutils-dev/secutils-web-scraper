@@ -51,7 +51,7 @@ interface InputBodyParamsType {
      * A content for a function that accepts a resource object and returns `true` if the resource should be tracked, or
      * `false` if resource should be ignored.
      */
-    includeResource?: string;
+    resourceFilter?: string;
   };
 }
 
@@ -153,10 +153,10 @@ async function getResourcesList(
   const page = await browser.newPage();
 
   // Inject custom scripts if any.
-  if (scripts?.includeResource) {
-    log.debug(`[${url}] Adding "includeResource" function: ${scripts.includeResource}.`);
+  if (scripts?.resourceFilter) {
+    log.debug(`[${url}] Adding "includeResource" function: ${scripts.resourceFilter}.`);
     await page.addInitScript({
-      content: `self.__secutils = { includeResource(resource) { ${scripts.includeResource} } }`,
+      content: `self.__secutils = { includeResource(resource) { ${scripts.resourceFilter} } }`,
     });
   }
 

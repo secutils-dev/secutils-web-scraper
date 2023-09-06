@@ -7,6 +7,6 @@ Content-Type: application/json
   "url": "https://secutils.dev",
   "delay": 2000,
   "scripts": {
-    "includeResource": "return true;"
+    "resourceFilter": "return true;"
   }
 }
