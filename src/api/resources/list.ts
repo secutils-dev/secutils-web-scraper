@@ -66,8 +66,8 @@ interface OutputBodyType {
 
 export interface ResourceWithRawData {
   url?: string;
-  rawData: string;
-  resourceType: 'script' | 'stylesheet';
+  data: string;
+  type: 'script' | 'stylesheet';
 }
 
 export interface SecutilsWindow extends Window {
@@ -187,8 +187,8 @@ async function getResourcesList(
         log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
         externalResources.push({
           url: response.url(),
-          rawData: responseBody.toString('utf-8'),
-          resourceType,
+          data: responseBody.toString('utf-8'),
+          type: resourceType,
           processed: false,
         });
       },
@@ -237,10 +237,10 @@ async function getResourcesList(
     const targetWindow = await page.evaluateHandle<Window>('window');
     extractedResources = await page.evaluate(
       async ([targetWindow, externalResources]) => {
-        async function parseURL(url: string): Promise<{ url: string; rawData: string }> {
+        async function parseURL(url: string): Promise<{ url: string; data: string }> {
           if (url.startsWith('data:')) {
             // For `data:` URLs we should replace the actual content the digest later.
-            return { url: `${url.split(',')[0]},`, rawData: url };
+            return { url: `${url.split(',')[0]},`, data: url };
           }
 
           if (url.startsWith('blob:')) {
@@ -248,17 +248,17 @@ async function getResourcesList(
             return {
               url: 'blob:',
               // [BUG] There is a bug in Node.js 20.4.0 that doesn't properly handle `await response.text()` in tests.
-              rawData: await fetch(url)
+              data: await fetch(url)
                 .then((res) => res.body?.getReader().read())
                 .then((res) => new TextDecoder().decode(res?.value)),
             };
           }
 
-          return { url, rawData: '' };
+          return { url, data: '' };
         }
 
         function isResourceValid(resource: ResourceWithRawData) {
-          return !!(resource.url || resource.rawData);
+          return !!(resource.url || resource.data);
         }
 
         const resources: ResourceWithRawData[] = [];
@@ -267,15 +267,13 @@ async function getResourcesList(
           // doesn't matter if the script is loaded from an external source or is inline. If later we figure out that
           // script content was also loaded from the external source (e.g. when `script` element has both `src` and
           // `innerHTML`) we'll re-calculate its digest and size.
-          const { url, rawData } = await parseURL(el.src.trim());
+          const { url, data } = await parseURL(el.src.trim());
 
-          const scriptResource: ResourceWithRawData = url
-            ? { url, rawData, resourceType: 'script' }
-            : { rawData, resourceType: 'script' };
-          const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + rawData;
+          const scriptResource: ResourceWithRawData = url ? { url, data, type: 'script' } : { data, type: 'script' };
+          const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + data;
           if (scriptContent) {
             const contentBlob = new Blob([scriptContent]);
-            scriptResource.rawData = await contentBlob.text();
+            scriptResource.data = await contentBlob.text();
           }
 
           if (isResourceValid(scriptResource)) {
@@ -284,15 +282,15 @@ async function getResourcesList(
         }
 
         for (const el of Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]'))) {
-          const { url, rawData } = await parseURL((el as HTMLLinkElement).href.trim());
+          const { url, data } = await parseURL((el as HTMLLinkElement).href.trim());
 
           const styleResource: ResourceWithRawData = url
-            ? { url, rawData, resourceType: 'stylesheet' }
-            : { rawData, resourceType: 'stylesheet' };
-          const styleContent = rawData;
+            ? { url, data, type: 'stylesheet' }
+            : { data, type: 'stylesheet' };
+          const styleContent = data;
           if (styleContent) {
             const contentBlob = new Blob([styleContent]);
-            styleResource.rawData = await contentBlob.text();
+            styleResource.data = await contentBlob.text();
           }
 
           if (isResourceValid(styleResource)) {
@@ -304,8 +302,8 @@ async function getResourcesList(
           const contentBlob = new Blob([el.innerHTML]);
           if (contentBlob.size > 0) {
             resources.push({
-              resourceType: 'stylesheet',
-              rawData: await contentBlob.text(),
+              type: 'stylesheet',
+              data: await contentBlob.text(),
             });
           }
         }
@@ -324,7 +322,7 @@ async function getResourcesList(
             externalResourcesMap.set(externalResource.url, { ...externalResource, processed: true });
           }
 
-          return { ...resource, rawData: resource.rawData + externalResource.rawData };
+          return { ...resource, data: resource.data + externalResource.data };
         });
 
         // Add remaining resources that browser fetched, but we didn't process.
@@ -357,17 +355,15 @@ async function getResourcesList(
                 }
 
                 // Check that resource type is valid.
-                if (mappedResource.resourceType !== 'script' && mappedResource.resourceType !== 'stylesheet') {
-                  console.debug(
-                    `[browser] Mapped resource type is not valid: ${JSON.stringify(mappedResource.resourceType)}`,
-                  );
+                if (mappedResource.type !== 'script' && mappedResource.type !== 'stylesheet') {
+                  console.debug(`[browser] Mapped resource type is not valid: ${JSON.stringify(mappedResource.type)}`);
                   throw new Error('Mapped resource is not valid');
                 }
 
                 // Check that resource raw data is valid.
-                if (typeof mappedResource.rawData !== 'string') {
+                if (typeof mappedResource.data !== 'string') {
                   console.debug(
-                    `[browser] Mapped resource raw data is not valid: ${JSON.stringify(mappedResource.rawData)}`,
+                    `[browser] Mapped resource raw data is not valid: ${JSON.stringify(mappedResource.data)}`,
                   );
                   throw new Error('Mapped resource is not valid');
                 }
@@ -394,10 +390,10 @@ async function getResourcesList(
 
   for (const resourceWithRawData of extractedResources) {
     let content: ResourceContent | undefined = undefined;
-    if (resourceWithRawData.rawData) {
+    if (resourceWithRawData.data) {
       content = {
-        data: createResourceContentData(log, resourceWithRawData.rawData),
-        size: resourceWithRawData.rawData.length,
+        data: createResourceContentData(log, resourceWithRawData.data),
+        size: resourceWithRawData.data.length,
       };
     }
 
@@ -413,7 +409,7 @@ async function getResourcesList(
     }
 
     if (url || content) {
-      (resourceWithRawData.resourceType === 'script' ? result.scripts : result.styles).push(
+      (resourceWithRawData.type === 'script' ? result.scripts : result.styles).push(
         url && content ? { url, content } : url ? { url } : { content },
       );
     }
@@ -429,31 +425,31 @@ async function getResourcesList(
   return result;
 }
 
-function createResourceContentData(log: FastifyBaseLogger, rawData: string): ResourceContentData {
+function createResourceContentData(log: FastifyBaseLogger, data: string): ResourceContentData {
   try {
-    return { type: 'tlsh', value: tlsHash(rawData) };
+    return { type: 'tlsh', value: tlsHash(data) };
   } catch (err) {
     // If data is too small, TLS hash will fail, but it's expected, and we shouldn't log this as an error.
-    if (rawData.length < 50) {
+    if (data.length < 50) {
       log.debug(
         `Failed to calculate TLS hash for resource as it's too small, will use raw data instead (size: ${
-          rawData.length
+          data.length
         }): ${Diagnostics.errorMessage(err)}.`,
       );
     } else {
       log.error(
         `Failed to calculate TLS hash for resource, will use raw data instead (size: ${
-          rawData.length
+          data.length
         }): ${Diagnostics.errorMessage(err)}.`,
       );
     }
   }
 
   // Protect against too big resources.
-  if (rawData.length > 256) {
-    log.warn(`Raw data is too big, will use SHA-1 digest instead (size: ${rawData.length}).`);
-    return { type: 'sha1', value: createHash('sha1').update(rawData).digest('hex') };
+  if (data.length > 256) {
+    log.warn(`Raw data is too big, will use SHA-1 digest instead (size: ${data.length}).`);
+    return { type: 'sha1', value: createHash('sha1').update(data).digest('hex') };
   }
 
-  return { type: 'raw', value: rawData };
+  return { type: 'raw', value: data };
 }

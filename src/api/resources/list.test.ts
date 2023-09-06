@@ -63,17 +63,17 @@ await test('[/api/resources] can parse resources', async (t) => {
       createResponseMock({
         url: 'https://secutils.dev/script.js',
         body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
-        resourceType: 'script',
+        type: 'script',
       }),
       createResponseMock({
         url: 'https://secutils.dev/weird-script.js',
         body: `window.document.body.innerHTML = "Hello Secutils.dev and world!";`,
-        resourceType: 'script',
+        type: 'script',
       }),
       createResponseMock({
         url: 'https://secutils.dev/fonts.css',
         body: '* { color: blue-ish-not-valid; font-size: 100500; }',
-        resourceType: 'stylesheet',
+        type: 'stylesheet',
       }),
     ],
   });
@@ -205,7 +205,7 @@ await test('[/api/resources] can inject resource filters', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
   const includeResourceMock = mock.fn((resource: ResourceWithRawData) =>
-    !resource.rawData.includes('alert') ? resource : null,
+    !resource.data.includes('alert') ? resource : null,
   );
 
   const windowMock = createWindowMock({ __secutils: { resourceFilterMap: includeResourceMock } });
@@ -234,12 +234,12 @@ await test('[/api/resources] can inject resource filters', async (t) => {
       createResponseMock({
         url: 'https://secutils.dev/script.js',
         body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
-        resourceType: 'script',
+        type: 'script',
       }),
       createResponseMock({
         url: 'https://secutils.dev/fonts.css',
         body: '* { color: blue-ish-not-valid; font-size: 100500; }',
-        resourceType: 'stylesheet',
+        type: 'stylesheet',
       }),
     ],
   });
@@ -297,28 +297,28 @@ await test('[/api/resources] can inject resource filters', async (t) => {
   assert.strictEqual(includeResourceMock.mock.callCount(), 4);
   assert.deepEqual(includeResourceMock.mock.calls[0].arguments, [
     {
-      rawData: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
-      resourceType: 'script',
+      data: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+      type: 'script',
       url: 'https://secutils.dev/script.js',
     },
   ]);
   assert.deepEqual(includeResourceMock.mock.calls[1].arguments, [
     {
-      rawData: 'alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)',
-      resourceType: 'script',
+      data: 'alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)',
+      type: 'script',
     },
   ]);
   assert.deepEqual(includeResourceMock.mock.calls[2].arguments, [
     {
-      rawData: '* { color: blue-ish-not-valid; font-size: 100500; }',
-      resourceType: 'stylesheet',
+      data: '* { color: blue-ish-not-valid; font-size: 100500; }',
+      type: 'stylesheet',
       url: 'https://secutils.dev/fonts.css',
     },
   ]);
   assert.deepEqual(includeResourceMock.mock.calls[3].arguments, [
     {
-      rawData: '* { color: black; background-color: white; font-size: 100; }',
-      resourceType: 'stylesheet',
+      data: '* { color: black; background-color: white; font-size: 100; }',
+      type: 'stylesheet',
     },
   ]);
 });

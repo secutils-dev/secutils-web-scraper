@@ -43,16 +43,16 @@ export function createWindowMock({ __secutils }: Pick<SecutilsWindow, '__secutil
 
 export interface ResponseMockOptions {
   url: string;
-  resourceType: 'script' | 'stylesheet';
+  type: 'script' | 'stylesheet';
   body?: unknown;
 }
 
 export type ResponseMock = ReturnType<typeof createResponseMock>;
-export function createResponseMock({ url, body, resourceType }: ResponseMockOptions) {
+export function createResponseMock({ url, body, type }: ResponseMockOptions) {
   return {
     url: () => url,
     request: () => ({
-      resourceType: () => resourceType,
+      resourceType: () => type,
       isNavigationRequest: () => false,
       method: () => 'GET',
     }),
