@@ -204,9 +204,11 @@ await test('[/api/resources] can parse resources', async (t) => {
 await test('[/api/resources] can inject resource filters', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
-  const includeResourceMock = mock.fn((resource: ResourceWithRawData) => !resource.rawData.includes('alert'));
+  const includeResourceMock = mock.fn((resource: ResourceWithRawData) =>
+    !resource.rawData.includes('alert') ? resource : null,
+  );
 
-  const windowMock = createWindowMock({ __secutils: { includeResource: includeResourceMock } });
+  const windowMock = createWindowMock({ __secutils: { resourceFilterMap: includeResourceMock } });
   windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
     if (selector === 'script') {
       return [

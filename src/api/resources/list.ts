@@ -48,10 +48,10 @@ interface InputBodyParamsType {
    */
   scripts?: {
     /**
-     * A content for a function that accepts a resource object and returns `true` if the resource should be tracked, or
-     * `false` if resource should be ignored.
+     * A content for a function that accepts a resource object and returns either resource (original or modified) or
+     * `null` if the resource shouldn't be tracked.
      */
-    resourceFilter?: string;
+    resourceFilterMap?: string;
   };
 }
 
@@ -72,7 +72,7 @@ export interface ResourceWithRawData {
 
 export interface SecutilsWindow extends Window {
   __secutils?: {
-    includeResource?: (resource: ResourceWithRawData) => boolean;
+    resourceFilterMap?: (resource: ResourceWithRawData) => ResourceWithRawData | null;
   };
 }
 
@@ -105,7 +105,7 @@ export function registerResourcesListRoutes({ server, cache, acquireBrowser }: A
           scripts: {
             type: 'object',
             properties: {
-              includeResource: { type: 'string' },
+              resourceFilterMap: { type: 'string' },
             },
           },
         },
@@ -153,10 +153,10 @@ async function getResourcesList(
   const page = await browser.newPage();
 
   // Inject custom scripts if any.
-  if (scripts?.resourceFilter) {
-    log.debug(`[${url}] Adding "includeResource" function: ${scripts.resourceFilter}.`);
+  if (scripts?.resourceFilterMap) {
+    log.debug(`[${url}] Adding "resourceFilterMap" function: ${scripts.resourceFilterMap}.`);
     await page.addInitScript({
-      content: `self.__secutils = { includeResource(resource) { ${scripts.resourceFilter} } }`,
+      content: `self.__secutils = { resourceFilterMap(resource) { ${scripts.resourceFilterMap} } }`,
     });
   }
 
@@ -334,27 +334,50 @@ async function getResourcesList(
           }
         }
 
-        const includeResource = targetWindow.__secutils?.includeResource;
-        if (includeResource && typeof includeResource !== 'function') {
-          console.error(`[browser] Invalid "includeResource" function: ${typeof includeResource}`);
-        } else if (includeResource) {
-          console.debug('[browser] Using custom "includeResource" function.');
+        const resourceFilterMap = targetWindow.__secutils?.resourceFilterMap;
+        if (resourceFilterMap && typeof resourceFilterMap !== 'function') {
+          console.error(`[browser] Invalid "resourceFilterMap" function: ${typeof resourceFilterMap}`);
+        } else if (resourceFilterMap) {
+          console.debug('[browser] Using custom "resourceFilterMap" function.');
         }
 
         try {
-          return typeof includeResource === 'function'
-            ? combinedResources.filter((resource) => {
-                const includeResourceResult = includeResource(resource);
-                if (!includeResourceResult) {
+          return typeof resourceFilterMap === 'function'
+            ? combinedResources.flatMap((resource) => {
+                const mappedResource = resourceFilterMap(resource);
+                if (!mappedResource) {
                   console.debug(`[browser] Skipping resource: ${resource.url ?? '<inline>'}`);
+                  return [];
                 }
 
-                return includeResourceResult;
+                // Check that the resource URL is valid.
+                if (mappedResource.url != null && typeof mappedResource.url !== 'string') {
+                  console.debug(`[browser] Mapped resource URL is not valid: ${JSON.stringify(mappedResource.url)}`);
+                  throw new Error('Mapped resource is not valid');
+                }
+
+                // Check that resource type is valid.
+                if (mappedResource.resourceType !== 'script' && mappedResource.resourceType !== 'stylesheet') {
+                  console.debug(
+                    `[browser] Mapped resource type is not valid: ${JSON.stringify(mappedResource.resourceType)}`,
+                  );
+                  throw new Error('Mapped resource is not valid');
+                }
+
+                // Check that resource raw data is valid.
+                if (typeof mappedResource.rawData !== 'string') {
+                  console.debug(
+                    `[browser] Mapped resource raw data is not valid: ${JSON.stringify(mappedResource.rawData)}`,
+                  );
+                  throw new Error('Mapped resource is not valid');
+                }
+
+                return [mappedResource];
               })
             : combinedResources;
         } catch (err: unknown) {
           console.error(
-            `[browser] Custom "includeResource" function has thrown an exception: ${(err as Error)?.message ?? err}.`,
+            `[browser] Custom "resourceFilterMap" function has thrown an exception: ${(err as Error)?.message ?? err}.`,
           );
 
           throw err;
