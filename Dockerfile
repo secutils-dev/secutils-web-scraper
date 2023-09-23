@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
 FROM --platform=$BUILDPLATFORM node:20-alpine3.18 as BUILDER
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 WORKDIR /app
 COPY ["./*.json", "./yarn.lock", "./"]
 RUN set -x && yarn install --frozen-lockfile
@@ -11,7 +10,6 @@ RUN set -x && yarn build
 
 FROM node:20-alpine3.18
 ENV NODE_ENV=production \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH="/usr/bin/chromium-browser"
 WORKDIR /app
 RUN set -x && apk update --no-cache && \
