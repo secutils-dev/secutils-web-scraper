@@ -4,7 +4,7 @@ The web scraper component of Secutils.dev, refer to [secutils-dev/secutils](http
 
 ## Getting started
 
-Install all the required dependencies with `yarn install` and run the scraper server in watch mode with `yarn watch`.
+Install all the required dependencies with `npm install` and run the scraper server in watch mode with `npm run watch`.
 
 ### Usage
 

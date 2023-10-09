@@ -2,11 +2,11 @@
 
 FROM --platform=$BUILDPLATFORM node:20-alpine3.18 as BUILDER
 WORKDIR /app
-COPY ["./*.json", "./yarn.lock", "./"]
-RUN set -x && yarn install --frozen-lockfile
+COPY ["./*.json", "./"]
+RUN set -x && npm ci
 COPY ["./src", "./src"]
-RUN set -x && yarn test
-RUN set -x && yarn build
+RUN set -x && npm test
+RUN set -x && npm run build
 
 FROM node:20-alpine3.18
 ENV NODE_ENV=production \
@@ -15,7 +15,7 @@ WORKDIR /app
 RUN set -x && apk update --no-cache && \
     apk upgrade --no-cache && \
     apk add --no-cache dumb-init nss freetype harfbuzz ca-certificates ttf-freefont chromium
-COPY --from=BUILDER ["/app/dist", "/app/package.json", "/app/yarn.lock", "./"]
-RUN set -x && yarn install --production --frozen-lockfile && yarn cache clean
+COPY --from=BUILDER ["/app/dist", "/app/package.json", "/app/package-lock.json", "./"]
+RUN set -x && npm ci && npm cache clean --force
 USER node
 CMD [ "node", "src/index.js" ]

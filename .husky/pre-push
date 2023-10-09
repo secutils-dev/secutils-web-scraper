@@ -2,13 +2,13 @@
 
 set -eu
 
-if ! yarn test
+if ! npm test
 then
     echo "Cannot test project."
     exit 1
 fi
 
-if ! yarn build
+if ! npm run build
 then
     echo "Cannot build project."
     exit 1
