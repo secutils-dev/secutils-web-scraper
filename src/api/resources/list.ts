@@ -85,8 +85,10 @@ const RESOURCES_SCHEMA = {
       content: {
         type: 'object',
         properties: {
-          digest: { type: 'string' },
-          data: { type: 'object', properties: { type: { type: 'string' }, value: { type: 'string' } } },
+          data: {
+            type: 'object',
+            properties: { sha1: { type: 'string' }, raw: { type: 'string' }, tlsh: { type: 'string' } },
+          },
           size: { type: 'number' },
         },
       },
@@ -403,7 +405,7 @@ async function getResourcesList(
       (resourceWithRawData.url.startsWith('data:') || resourceWithRawData.url.startsWith('blob:'))
     ) {
       // For data:/blob: URLs we should replace the actual content the digest.
-      url = `${resourceWithRawData.url}[${content?.data.value ?? ''}]`;
+      url = `${resourceWithRawData.url}[${Object.values(content?.data ?? {})[0] ?? ''}]`;
     } else {
       url = resourceWithRawData.url;
     }
@@ -427,7 +429,7 @@ async function getResourcesList(
 
 function createResourceContentData(log: FastifyBaseLogger, data: string): ResourceContentData {
   try {
-    return { type: 'tlsh', value: tlsHash(data) };
+    return { tlsh: tlsHash(data) };
   } catch (err) {
     // If data is too small, TLS hash will fail, but it's expected, and we shouldn't log this as an error.
     if (data.length < 50) {
@@ -448,8 +450,8 @@ function createResourceContentData(log: FastifyBaseLogger, data: string): Resour
   // Protect against too big resources.
   if (data.length > 256) {
     log.warn(`Raw data is too big, will use SHA-1 digest instead (size: ${data.length}).`);
-    return { type: 'sha1', value: createHash('sha1').update(data).digest('hex') };
+    return { sha1: createHash('sha1').update(data).digest('hex') };
   }
 
-  return { type: 'raw', value: data };
+  return { raw: data };
 }

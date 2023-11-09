@@ -10,3 +10,14 @@ Content-Type: application/json
     "resourceFilterMap": "return resource;"
   }
 }
+
+### List resources
+POST {{host}}/api/resources
+Accept: application/json
+Content-Type: application/json
+
+{
+  "url": "https://news.ycombinator.com/",
+  "delay": 2000
+}
+

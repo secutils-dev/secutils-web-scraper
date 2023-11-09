@@ -32,7 +32,4 @@ export interface ResourceContent {
  * Describes resource content data, it can either be the raw content data or a hash such as Trend Micro Locality
  * Sensitive Hash or simple SHA-1.
  */
-export interface ResourceContentData {
-  type: 'raw' | 'tlsh' | 'sha1';
-  value: string;
-}
+export type ResourceContentData = { raw: string } | { tlsh: string } | { sha1: string };
