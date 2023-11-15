@@ -4,10 +4,11 @@ import { setTimeout as setTimeoutAsync } from 'timers/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Browser, JSHandle } from 'playwright';
 
-import type { Resource, ResourceContent, ResourceContentData } from './resource.js';
-import type { APIRouteParams } from '../api_route_params.js';
-import { Diagnostics } from '../diagnostics.js';
-import { tlsHash } from '../tls_hash.js';
+import type { WebPageResource, WebPageResourceContent, WebPageResourceContentData } from './web_page_resource.js';
+import type { APIRouteParams } from '../../api_route_params.js';
+import { Diagnostics } from '../../diagnostics.js';
+import { tlsHash } from '../../tls_hash.js';
+import type { SecutilsWindow } from '../index.js';
 
 /**
  * Default timeout for the page load, in ms.
@@ -60,20 +61,14 @@ interface InputBodyParamsType {
  */
 interface OutputBodyType {
   timestamp: number;
-  scripts: Resource[];
-  styles: Resource[];
+  scripts: WebPageResource[];
+  styles: WebPageResource[];
 }
 
-export interface ResourceWithRawData {
+export interface WebPageResourceWithRawData {
   url?: string;
   data: string;
   type: 'script' | 'stylesheet';
-}
-
-export interface SecutilsWindow extends Window {
-  __secutils?: {
-    resourceFilterMap?: (resource: ResourceWithRawData) => ResourceWithRawData | null;
-  };
 }
 
 const RESOURCES_SCHEMA = {
@@ -96,9 +91,9 @@ const RESOURCES_SCHEMA = {
   },
 };
 
-export function registerResourcesListRoutes({ server, cache, acquireBrowser }: APIRouteParams) {
+export function registerWebPageResourcesListRoutes({ server, cache, acquireBrowser }: APIRouteParams) {
   return server.post<{ Body: InputBodyParamsType }>(
-    '/api/resources',
+    '/api/web_page/resources',
     {
       schema: {
         body: {
@@ -172,7 +167,7 @@ async function getResourcesList(
     }
   });
 
-  const externalResources: Array<Omit<ResourceWithRawData, 'url'> & { url: string; processed: boolean }> = [];
+  const externalResources: Array<Omit<WebPageResourceWithRawData, 'url'> & { url: string; processed: boolean }> = [];
   page.on('response', (response) => {
     const request = response.request();
     const resourceType = request.resourceType() as 'script' | 'stylesheet';
@@ -233,7 +228,7 @@ async function getResourcesList(
   log.debug(`Delaying resource extraction for ${delay}ms.`);
   await setTimeoutAsync(delay);
 
-  let extractedResources: ResourceWithRawData[];
+  let extractedResources: WebPageResourceWithRawData[];
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
     const targetWindow = await page.evaluateHandle<Window>('window');
@@ -259,11 +254,11 @@ async function getResourcesList(
           return { url, data: '' };
         }
 
-        function isResourceValid(resource: ResourceWithRawData) {
+        function isResourceValid(resource: WebPageResourceWithRawData) {
           return !!(resource.url || resource.data);
         }
 
-        const resources: ResourceWithRawData[] = [];
+        const resources: WebPageResourceWithRawData[] = [];
         for (const el of Array.from(targetWindow.document.querySelectorAll('script'))) {
           // We treat script content as a concatenation of `onload` handler and its inner content. For our purposes it
           // doesn't matter if the script is loaded from an external source or is inline. If later we figure out that
@@ -271,7 +266,9 @@ async function getResourcesList(
           // `innerHTML`) we'll re-calculate its digest and size.
           const { url, data } = await parseURL(el.src.trim());
 
-          const scriptResource: ResourceWithRawData = url ? { url, data, type: 'script' } : { data, type: 'script' };
+          const scriptResource: WebPageResourceWithRawData = url
+            ? { url, data, type: 'script' }
+            : { data, type: 'script' };
           const scriptContent = (el.onload?.toString().trim() ?? '') + el.innerHTML.trim() + data;
           if (scriptContent) {
             const contentBlob = new Blob([scriptContent]);
@@ -286,7 +283,7 @@ async function getResourcesList(
         for (const el of Array.from(targetWindow.document.querySelectorAll('link[rel=stylesheet]'))) {
           const { url, data } = await parseURL((el as HTMLLinkElement).href.trim());
 
-          const styleResource: ResourceWithRawData = url
+          const styleResource: WebPageResourceWithRawData = url
             ? { url, data, type: 'stylesheet' }
             : { data, type: 'stylesheet' };
           const styleContent = data;
@@ -312,7 +309,7 @@ async function getResourcesList(
 
         // Some inline resources may also be loaded from external sources. We should combine them with the external.
         const externalResourcesMap = new Map(externalResources.map((resource) => [resource.url, resource]));
-        const combinedResources = resources.map((resource: ResourceWithRawData) => {
+        const combinedResources = resources.map((resource: WebPageResourceWithRawData) => {
           // Skip inline resources and resources that weren't fetched.
           const externalResource = resource.url ? externalResourcesMap.get(resource.url) : undefined;
           if (!externalResource) {
@@ -391,7 +388,7 @@ async function getResourcesList(
   log.debug(`Extracted ${extractedResources.length} resources for the page "${url}".`);
 
   for (const resourceWithRawData of extractedResources) {
-    let content: ResourceContent | undefined = undefined;
+    let content: WebPageResourceContent | undefined = undefined;
     if (resourceWithRawData.data) {
       content = {
         data: createResourceContentData(log, resourceWithRawData.data),
@@ -427,7 +424,7 @@ async function getResourcesList(
   return result;
 }
 
-function createResourceContentData(log: FastifyBaseLogger, data: string): ResourceContentData {
+function createResourceContentData(log: FastifyBaseLogger, data: string): WebPageResourceContentData {
   try {
     return { tlsh: tlsHash(data) };
   } catch (err) {

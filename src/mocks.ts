@@ -2,7 +2,7 @@ import { mock } from 'node:test';
 
 import type { Browser } from 'playwright';
 
-import type { SecutilsWindow } from './api/resources/index.js';
+import type { SecutilsWindow } from './api/web_page/index.js';
 
 export function createBrowserMock(pageMock?: ReturnType<typeof createPageMock>) {
   return {
@@ -61,8 +61,8 @@ export function createResponseMock({ url, body, type }: ResponseMockOptions) {
         Buffer.isBuffer(body)
           ? body
           : body
-          ? Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))
-          : body,
+            ? Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))
+            : body,
       );
     },
   };

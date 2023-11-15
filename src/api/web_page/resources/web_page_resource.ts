@@ -1,7 +1,7 @@
 /**
  * Describes external or inline resource.
  */
-export interface Resource {
+export interface WebPageResource {
   /**
    * The URL resources is loaded from.
    */
@@ -10,17 +10,17 @@ export interface Resource {
   /**
    * Resource content descriptor (size and digest), if available.
    */
-  content?: ResourceContent;
+  content?: WebPageResourceContent;
 }
 
 /**
  * Describes resource content.
  */
-export interface ResourceContent {
+export interface WebPageResourceContent {
   /**
    * Resource content data.
    */
-  data: ResourceContentData;
+  data: WebPageResourceContentData;
 
   /**
    * Size of the inline resource content, if available, in bytes.
@@ -32,4 +32,4 @@ export interface ResourceContent {
  * Describes resource content data, it can either be the raw content data or a hash such as Trend Micro Locality
  * Sensitive Hash or simple SHA-1.
  */
-export type ResourceContentData = { raw: string } | { tlsh: string } | { sha1: string };
+export type WebPageResourceContentData = { raw: string } | { tlsh: string } | { sha1: string };

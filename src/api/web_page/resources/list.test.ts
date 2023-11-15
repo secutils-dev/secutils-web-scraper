@@ -2,16 +2,16 @@ import * as assert from 'node:assert';
 import { Blob } from 'node:buffer';
 import { mock, test } from 'node:test';
 
-import type { ResourceWithRawData } from './list.js';
-import { registerResourcesListRoutes } from './list.js';
-import { createBrowserMock, createPageMock, createResponseMock, createWindowMock } from '../../mocks.js';
-import { createMock } from '../api_route_params.mocks.js';
+import type { WebPageResourceWithRawData } from './list.js';
+import { registerWebPageResourcesListRoutes } from './list.js';
+import { createBrowserMock, createPageMock, createResponseMock, createWindowMock } from '../../../mocks.js';
+import { createMock } from '../../api_route_params.mocks.js';
 
-await test('[/api/resources] can successfully create route', () => {
-  assert.doesNotThrow(() => registerResourcesListRoutes(createMock()));
+await test('[/api/web_page/resources] can successfully create route', () => {
+  assert.doesNotThrow(() => registerWebPageResourcesListRoutes(createMock()));
 });
 
-await test('[/api/resources] can parse resources', async (t) => {
+await test('[/api/web_page/resources] can parse resources', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
   const windowMock = createWindowMock();
@@ -78,9 +78,11 @@ await test('[/api/resources] can parse resources', async (t) => {
     ],
   });
 
-  const response = await registerResourcesListRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+  const response = await registerWebPageResourcesListRoutes(
+    createMock({ browser: createBrowserMock(pageMock) }),
+  ).inject({
     method: 'POST',
-    url: '/api/resources',
+    url: '/api/web_page/resources',
     payload: { url: 'https://secutils.dev', delay: 0 },
   });
 
@@ -201,10 +203,10 @@ await test('[/api/resources] can parse resources', async (t) => {
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
 });
 
-await test('[/api/resources] can inject resource filters', async (t) => {
+await test('[/api/web_page/resources] can inject resource filters', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
-  const includeResourceMock = mock.fn((resource: ResourceWithRawData) =>
+  const includeResourceMock = mock.fn((resource: WebPageResourceWithRawData) =>
     !resource.data.includes('alert') ? resource : null,
   );
 
@@ -244,9 +246,11 @@ await test('[/api/resources] can inject resource filters', async (t) => {
     ],
   });
 
-  const response = await registerResourcesListRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+  const response = await registerWebPageResourcesListRoutes(
+    createMock({ browser: createBrowserMock(pageMock) }),
+  ).inject({
     method: 'POST',
-    url: '/api/resources',
+    url: '/api/web_page/resources',
     payload: { url: 'https://secutils.dev', delay: 0 },
   });
 
