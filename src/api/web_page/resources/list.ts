@@ -5,20 +5,12 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { Browser, JSHandle } from 'playwright';
 
 import type { WebPageResource, WebPageResourceContent, WebPageResourceContentData } from './web_page_resource.js';
-import type { APIRouteParams } from '../../api_route_params.js';
+import type { ApiResult } from '../../api_result.js';
+import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
 import { tlsHash } from '../../tls_hash.js';
+import { DEFAULT_DELAY_MS, DEFAULT_TIMEOUT_MS } from '../constants.js';
 import type { SecutilsWindow } from '../index.js';
-
-/**
- * Default timeout for the page load, in ms.
- */
-const DEFAULT_TIMEOUT_MS = 5000;
-
-/**
- * Default delay to wait after page load, in ms.
- */
-const DEFAULT_DELAY_MS = 2000;
 
 /**
  * Defines type of the input parameters.
@@ -91,7 +83,7 @@ const RESOURCES_SCHEMA = {
   },
 };
 
-export function registerWebPageResourcesListRoutes({ server, cache, acquireBrowser }: APIRouteParams) {
+export function registerWebPageResourcesListRoutes({ server, cache, acquireBrowser }: ApiRouteParams) {
   return server.post<{ Body: InputBodyParamsType }>(
     '/api/web_page/resources',
     {
@@ -124,16 +116,24 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
       }`;
       if (!cache.has(cacheKey)) {
         const browser = await acquireBrowser();
-        const log = server.log.child({ provider: 'resources_list' });
+        const log = server.log.child({ provider: 'web_page_resources_list' });
+
         try {
-          cache.set(cacheKey, await getResourcesList(browser, log, request.body));
+          const result = await getResourcesList(browser, log, request.body);
+          if (result.type === 'client-error') {
+            log.error(`Cannot retrieve resources for page "${request.body.url}" due to client error: ${result.error}`);
+            await Diagnostics.screenshot(log, browser);
+            return reply.code(400).send({ message: result.error });
+          }
+
+          cache.set(cacheKey, result.data);
           log.debug(`Successfully fetched resources for page "${request.body.url}".`);
         } catch (err) {
           log.error(`Cannot retrieve resources for page "${request.body.url}": ${Diagnostics.errorMessage(err)}`);
           await Diagnostics.screenshot(log, browser);
-          return reply
-            .code(500)
-            .send(`Cannot retrieve resources for page "${request.body.url}". Check the server logs for more details.`);
+          return reply.code(500).send({
+            message: `Cannot retrieve resources for page "${request.body.url}". Check the server logs for more details.`,
+          });
         }
       }
 
@@ -146,7 +146,7 @@ async function getResourcesList(
   browser: Browser,
   log: FastifyBaseLogger,
   { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts }: InputBodyParamsType,
-): Promise<OutputBodyType> {
+): Promise<ApiResult<OutputBodyType>> {
   const page = await browser.newPage();
 
   // Inject custom scripts if any.
@@ -199,19 +199,14 @@ async function getResourcesList(
     );
   });
 
-  const result: OutputBodyType = {
-    timestamp: Math.floor(Date.now() / 1000),
-    scripts: [],
-    styles: [],
-  };
-
   log.debug(`Fetching resources for "${url}" (timeout: ${timeout}ms).`);
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
     log.debug(`Page "${url}" is loaded.`);
   } catch (err) {
-    log.error(`Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`);
-    throw err;
+    const errorMessage = `Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`;
+    log.error(errorMessage);
+    return { type: 'client-error', error: errorMessage };
   }
 
   if (waitSelector) {
@@ -220,14 +215,18 @@ async function getResourcesList(
       await page.waitForSelector(waitSelector, { timeout });
       log.debug(`Retrieved selector "${waitSelector}".`);
     } catch (err) {
-      log.error(`Failed to retrieve selector "${waitSelector}" for page "${url}": ${Diagnostics.errorMessage(err)}`);
-      throw err;
+      const errorMessage = `Failed to retrieve selector "${waitSelector}" for page "${url}": ${Diagnostics.errorMessage(
+        err,
+      )}`;
+      log.error(errorMessage);
+      return { type: 'client-error', error: errorMessage };
     }
   }
 
   log.debug(`Delaying resource extraction for ${delay}ms.`);
   await setTimeoutAsync(delay);
 
+  const timestamp = Math.floor(Date.now() / 1000);
   let extractedResources: WebPageResourceWithRawData[];
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
@@ -372,21 +371,24 @@ async function getResourcesList(
             : combinedResources;
         } catch (err: unknown) {
           console.error(
-            `[browser] Custom "resourceFilterMap" function has thrown an exception: ${(err as Error)?.message ?? err}.`,
+            `[browser] Resources filter script has thrown an exception: ${(err as Error)?.message ?? err}.`,
           );
+          console.trace(err);
 
-          throw err;
+          throw new Error(`Resources filter script has thrown an exception: ${(err as Error)?.message ?? err}.`);
         }
       },
       [targetWindow as JSHandle<SecutilsWindow>, externalResources] as const,
     );
   } catch (err) {
     log.error(`Failed to extract resources for page "${url}: ${Diagnostics.errorMessage(err)}`);
-    throw err;
+    return { type: 'client-error', error: Diagnostics.errorMessage(err) };
   }
 
   log.debug(`Extracted ${extractedResources.length} resources for the page "${url}".`);
 
+  const resultScripts: WebPageResource[] = [];
+  const resultStyles: WebPageResource[] = [];
   for (const resourceWithRawData of extractedResources) {
     let content: WebPageResourceContent | undefined = undefined;
     if (resourceWithRawData.data) {
@@ -408,7 +410,7 @@ async function getResourcesList(
     }
 
     if (url || content) {
-      (resourceWithRawData.type === 'script' ? result.scripts : result.styles).push(
+      (resourceWithRawData.type === 'script' ? resultScripts : resultStyles).push(
         url && content ? { url, content } : url ? { url } : { content },
       );
     }
@@ -421,7 +423,7 @@ async function getResourcesList(
     log.error(`Failed to close page "${url}": ${Diagnostics.errorMessage(err)}`);
   }
 
-  return result;
+  return { type: 'success', data: { timestamp, scripts: resultScripts, styles: resultStyles } };
 }
 
 function createResourceContentData(log: FastifyBaseLogger, data: string): WebPageResourceContentData {

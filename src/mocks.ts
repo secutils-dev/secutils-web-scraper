@@ -6,6 +6,7 @@ import type { SecutilsWindow } from './api/web_page/index.js';
 
 export function createBrowserMock(pageMock?: ReturnType<typeof createPageMock>) {
   return {
+    isConnected: mock.fn(() => false),
     newPage: mock.fn(() => pageMock ?? createPageMock()),
   } as unknown as Browser;
 }
@@ -32,10 +33,14 @@ export function createPageMock({ window = createWindowMock(), responses = [] }: 
 }
 
 export type WindowMock = ReturnType<typeof createWindowMock>;
-export function createWindowMock({ __secutils }: Pick<SecutilsWindow, '__secutils'> = {}) {
+export function createWindowMock(
+  { __secutils }: Pick<SecutilsWindow, '__secutils'> = {},
+  documentProperties: Record<string, unknown> = {},
+) {
   return {
     document: {
       querySelectorAll: mock.fn(() => []),
+      ...documentProperties,
     },
     __secutils,
   };

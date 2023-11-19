@@ -1,0 +1,12 @@
+### Get content
+POST {{host}}/api/web_page/content
+Accept: application/json
+Content-Type: application/json
+
+{
+  "url": "https://news.ycombinator.com/",
+  "delay": 2000,
+  "scripts": {
+    "extractContent": "return document.querySelector('.titleline')?.textContent.trim();"
+  }
+}

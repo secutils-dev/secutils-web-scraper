@@ -1,6 +1,6 @@
-import type { APIRouteParams } from '../api_route_params.js';
+import type { ApiRouteParams } from '../api_route_params.js';
 
-export function registerStatusGetRoutes({ server, config }: APIRouteParams) {
+export function registerStatusGetRoutes({ server, config }: ApiRouteParams) {
   return server.get(
     '/api/status',
     {

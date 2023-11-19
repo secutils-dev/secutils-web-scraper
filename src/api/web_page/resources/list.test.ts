@@ -206,11 +206,11 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
 await test('[/api/web_page/resources] can inject resource filters', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
-  const includeResourceMock = mock.fn((resource: WebPageResourceWithRawData) =>
+  const resourceFilterMapMock = mock.fn((resource: WebPageResourceWithRawData) =>
     !resource.data.includes('alert') ? resource : null,
   );
 
-  const windowMock = createWindowMock({ __secutils: { resourceFilterMap: includeResourceMock } });
+  const windowMock = createWindowMock({ __secutils: { resourceFilterMap: resourceFilterMapMock } });
   windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
     if (selector === 'script') {
       return [
@@ -298,31 +298,79 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
 
   // Make sure we called includeResource.
-  assert.strictEqual(includeResourceMock.mock.callCount(), 4);
-  assert.deepEqual(includeResourceMock.mock.calls[0].arguments, [
+  assert.strictEqual(resourceFilterMapMock.mock.callCount(), 4);
+  assert.deepEqual(resourceFilterMapMock.mock.calls[0].arguments, [
     {
       data: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
       type: 'script',
       url: 'https://secutils.dev/script.js',
     },
   ]);
-  assert.deepEqual(includeResourceMock.mock.calls[1].arguments, [
+  assert.deepEqual(resourceFilterMapMock.mock.calls[1].arguments, [
     {
       data: 'alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)alert(1)',
       type: 'script',
     },
   ]);
-  assert.deepEqual(includeResourceMock.mock.calls[2].arguments, [
+  assert.deepEqual(resourceFilterMapMock.mock.calls[2].arguments, [
     {
       data: '* { color: blue-ish-not-valid; font-size: 100500; }',
       type: 'stylesheet',
       url: 'https://secutils.dev/fonts.css',
     },
   ]);
-  assert.deepEqual(includeResourceMock.mock.calls[3].arguments, [
+  assert.deepEqual(resourceFilterMapMock.mock.calls[3].arguments, [
     {
       data: '* { color: black; background-color: white; font-size: 100; }',
       type: 'stylesheet',
+    },
+  ]);
+});
+
+await test('[/api/web_page/resources] reports errors in resource filters', async (t) => {
+  t.mock.method(Date, 'now', () => 123000);
+
+  const resourceFilterMapMock = mock.fn(() => {
+    throw new Error('something went wrong');
+  });
+
+  const windowMock = createWindowMock({ __secutils: { resourceFilterMap: resourceFilterMapMock } });
+  windowMock.document.querySelectorAll.mock.mockImplementation((selector: string) => {
+    if (selector === 'script') {
+      return [{ src: '', innerHTML: 'alert(1)' }];
+    }
+
+    return [];
+  });
+
+  const pageMock = createPageMock({
+    window: windowMock,
+    responses: [],
+  });
+
+  const response = await registerWebPageResourcesListRoutes(
+    createMock({ browser: createBrowserMock(pageMock) }),
+  ).inject({
+    method: 'POST',
+    url: '/api/web_page/resources',
+    payload: { url: 'https://secutils.dev', delay: 0 },
+  });
+
+  assert.strictEqual(response.statusCode, 400);
+
+  assert.strictEqual(
+    response.body,
+    JSON.stringify({
+      message: 'Resources filter script has thrown an exception: something went wrong.',
+    }),
+  );
+
+  // Make sure we called includeResource.
+  assert.strictEqual(resourceFilterMapMock.mock.callCount(), 1);
+  assert.deepEqual(resourceFilterMapMock.mock.calls[0].arguments, [
+    {
+      data: 'alert(1)',
+      type: 'script',
     },
   ]);
 });

@@ -4,7 +4,7 @@ import type { Browser } from 'playwright';
 
 import type { Config } from '../config.js';
 
-export interface APIRouteParams {
+export interface ApiRouteParams {
   server: FastifyInstance;
   cache: NodeCache;
   config: Config;
