@@ -52,6 +52,11 @@ interface InputBodyParamsType {
      */
     extractContent?: string;
   };
+
+  /**
+   * Optional list of HTTP headers that should be sent with the tracker requests.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -84,6 +89,7 @@ export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser 
               extractContent: { type: 'string' },
             },
           },
+          headers: { type: 'object' },
         },
         response: {
           200: {
@@ -137,9 +143,10 @@ async function getContent(
     delay = DEFAULT_DELAY_MS,
     scripts,
     previousContent,
+    headers,
   }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ extraHTTPHeaders: headers });
 
   // Inject custom scripts if any.
   if (scripts?.extractContent) {

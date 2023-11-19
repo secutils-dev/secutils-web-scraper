@@ -1,6 +1,8 @@
 import * as assert from 'node:assert';
 import { mock, test } from 'node:test';
 
+import type { Browser } from 'playwright/index.js';
+
 import { registerWebPageContentGetRoutes } from './get.js';
 import { createBrowserMock, createPageMock, createWindowMock } from '../../../mocks.js';
 import { createMock } from '../../api_route_params.mocks.js';
@@ -16,7 +18,9 @@ await test('[/api/web_page/content] can extract content', async (t) => {
 
   const pageMock = createPageMock({ window: windowMock, responses: [] });
 
-  const response = await registerWebPageContentGetRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+  const response = await registerWebPageContentGetRoutes(
+    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
+  ).inject({
     method: 'POST',
     url: '/api/web_page/content',
     payload: { url: 'https://secutils.dev', delay: 0 },
@@ -57,10 +61,18 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
     responses: [],
   });
 
-  const response = await registerWebPageContentGetRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+  const browserMock = createBrowserMock(pageMock);
+  const response = await registerWebPageContentGetRoutes(
+    createMock({ browser: browserMock as unknown as Browser }),
+  ).inject({
     method: 'POST',
     url: '/api/web_page/content',
-    payload: { url: 'https://secutils.dev', delay: 0, previousContent: '{ "message": "hello" }' },
+    payload: {
+      url: 'https://secutils.dev',
+      delay: 0,
+      previousContent: '{ "message": "hello" }',
+      headers: { Cookie: 'my-cookie' },
+    },
   });
 
   assert.strictEqual(response.statusCode, 200);
@@ -79,6 +91,9 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
     'https://secutils.dev',
     { waitUntil: 'domcontentloaded', timeout: 5000 },
   ]);
+
+  assert.strictEqual(browserMock.newPage.mock.callCount(), 1);
+  assert.deepEqual(browserMock.newPage.mock.calls[0].arguments, [{ extraHTTPHeaders: { Cookie: 'my-cookie' } }]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
@@ -101,7 +116,9 @@ await test('[/api/web_page/content] reports errors in content extractor', async 
     responses: [],
   });
 
-  const response = await registerWebPageContentGetRoutes(createMock({ browser: createBrowserMock(pageMock) })).inject({
+  const response = await registerWebPageContentGetRoutes(
+    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
+  ).inject({
     method: 'POST',
     url: '/api/web_page/content',
     payload: { url: 'https://secutils.dev', delay: 0, previousContent: '"previous"' },

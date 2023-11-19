@@ -46,6 +46,11 @@ interface InputBodyParamsType {
      */
     resourceFilterMap?: string;
   };
+
+  /**
+   * Optional list of HTTP headers that should be sent with the tracker requests.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -97,6 +102,7 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
               resourceFilterMap: { type: 'string' },
             },
           },
+          headers: { type: 'object' },
         },
         response: {
           200: {
@@ -145,9 +151,9 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
 async function getResourcesList(
   browser: Browser,
   log: FastifyBaseLogger,
-  { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts }: InputBodyParamsType,
+  { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts, headers }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ extraHTTPHeaders: headers });
 
   // Inject custom scripts if any.
   if (scripts?.resourceFilterMap) {

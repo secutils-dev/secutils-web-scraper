@@ -2,6 +2,8 @@ import * as assert from 'node:assert';
 import { Blob } from 'node:buffer';
 import { mock, test } from 'node:test';
 
+import type { Browser } from 'playwright/index.js';
+
 import type { WebPageResourceWithRawData } from './list.js';
 import { registerWebPageResourcesListRoutes } from './list.js';
 import { createBrowserMock, createPageMock, createResponseMock, createWindowMock } from '../../../mocks.js';
@@ -79,7 +81,7 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
   });
 
   const response = await registerWebPageResourcesListRoutes(
-    createMock({ browser: createBrowserMock(pageMock) }),
+    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/resources',
@@ -246,12 +248,13 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
     ],
   });
 
+  const browserMock = createBrowserMock(pageMock);
   const response = await registerWebPageResourcesListRoutes(
-    createMock({ browser: createBrowserMock(pageMock) }),
+    createMock({ browser: browserMock as unknown as Browser }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/resources',
-    payload: { url: 'https://secutils.dev', delay: 0 },
+    payload: { url: 'https://secutils.dev', delay: 0, headers: { Cookie: 'my-cookie' } },
   });
 
   assert.strictEqual(response.statusCode, 200);
@@ -293,6 +296,9 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
     'https://secutils.dev',
     { waitUntil: 'domcontentloaded', timeout: 5000 },
   ]);
+
+  assert.strictEqual(browserMock.newPage.mock.callCount(), 1);
+  assert.deepEqual(browserMock.newPage.mock.calls[0].arguments, [{ extraHTTPHeaders: { Cookie: 'my-cookie' } }]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
@@ -349,7 +355,7 @@ await test('[/api/web_page/resources] reports errors in resource filters', async
   });
 
   const response = await registerWebPageResourcesListRoutes(
-    createMock({ browser: createBrowserMock(pageMock) }),
+    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/resources',

@@ -13,7 +13,10 @@ interface MockOptions {
   config?: Config;
 }
 
-export function createMock({ browser = createBrowserMock(), config = configure() }: MockOptions = {}) {
+export function createMock({
+  browser = createBrowserMock() as unknown as Browser,
+  config = configure(),
+}: MockOptions = {}) {
   return {
     server: fastify({ logger: { level: 'warn' } }),
     cache: new NodeCache({ stdTTL: 0 }),
