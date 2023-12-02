@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as setTimeoutAsync } from 'timers/promises';
 
+import jsonStableStringify from 'fast-json-stable-stringify';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Browser, JSHandle } from 'playwright';
 
@@ -233,34 +234,34 @@ async function getContent(
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
     const targetWindow = await page.evaluateHandle<Window>('window');
-    extractedContent = await page.evaluate(
-      async ([targetWindow, previousContent, externalResources]) => {
-        const extractContent = targetWindow.__secutils?.extractContent;
-        if (extractContent && typeof extractContent !== 'function') {
-          console.error(`[browser] Invalid "extractContent" function: ${typeof extractContent}`);
-        } else if (extractContent) {
-          console.debug('[browser] Using custom "extractContent" function.');
-        }
+    extractedContent = jsonStableStringify(
+      await page.evaluate(
+        async ([targetWindow, previousContent, externalResources]) => {
+          const extractContent = targetWindow.__secutils?.extractContent;
+          if (extractContent && typeof extractContent !== 'function') {
+            console.error(`[browser] Invalid "extractContent" function: ${typeof extractContent}`);
+          } else if (extractContent) {
+            console.debug('[browser] Using custom "extractContent" function.');
+          }
 
-        try {
-          return JSON.stringify(
-            typeof extractContent === 'function'
+          try {
+            return typeof extractContent === 'function'
               ? (await extractContent(
                   previousContent !== undefined ? JSON.parse(previousContent) : previousContent,
                   externalResources,
                 )) ?? null
-              : targetWindow.document.body?.outerHTML ?? null,
-          );
-        } catch (err: unknown) {
-          console.error(
-            `[browser] Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`,
-          );
-          console.trace(err);
+              : targetWindow.document.body?.outerHTML ?? null;
+          } catch (err: unknown) {
+            console.error(
+              `[browser] Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`,
+            );
+            console.trace(err);
 
-          throw new Error(`Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
-        }
-      },
-      [targetWindow as JSHandle<SecutilsWindow>, previousContent, externalResources] as const,
+            throw new Error(`Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
+          }
+        },
+        [targetWindow as JSHandle<SecutilsWindow>, previousContent, externalResources] as const,
+      ),
     );
   } catch (err) {
     log.error(`Failed to extract content for page "${url}: ${Diagnostics.errorMessage(err)}`);
