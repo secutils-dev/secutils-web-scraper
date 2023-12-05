@@ -273,11 +273,13 @@ async function getContent(
     log.error(
       `Extracted content for "${url}" is too large (size: ${contentSize} bytes, max: ${MAX_CONTENT_SIZE_BYTES} bytes).`,
     );
-    extractedContent = `Extracted content was too large (${contentSize} bytes) and has been replaced with the SHA-1 hash: ${createHash(
-      'sha1',
-    )
-      .update(extractedContent)
-      .digest('hex')}`;
+    extractedContent = jsonStableStringify(
+      `Extracted content was too large (${contentSize} bytes) and has been replaced with the SHA-1 hash: ${createHash(
+        'sha1',
+      )
+        .update(extractedContent)
+        .digest('hex')}`,
+    );
   } else {
     log.debug(`Successfully extracted content for "${url}" (${contentSize} bytes).`);
   }
