@@ -12,8 +12,9 @@ export function createBrowserMock(pageMock?: ReturnType<typeof createPageMock>) 
 interface PageMockOptions {
   window?: WindowMock;
   responses?: Array<ResponseMock>;
+  content?: string;
 }
-export function createPageMock({ window = createWindowMock(), responses = [] }: PageMockOptions = {}) {
+export function createPageMock({ window = createWindowMock(), responses = [], content = '' }: PageMockOptions = {}) {
   return {
     on: mock.fn((eventName: string, handler: (response: ResponseMock) => void) => {
       if (eventName === 'response') {
@@ -23,7 +24,9 @@ export function createPageMock({ window = createWindowMock(), responses = [] }: 
       }
     }),
     close: mock.fn(),
-    goto: mock.fn(),
+    goto: mock.fn(() => Promise.resolve(createResponseMock({ url: 'https://secutils.dev', type: 'document' }))),
+    content: mock.fn(() => Promise.resolve(content)),
+    addInitScript: mock.fn(),
     waitForSelector: mock.fn(),
     evaluateHandle: mock.fn(() => window),
     evaluate: mock.fn((fn: (args: unknown) => Promise<unknown>, args: unknown) => fn(args)),
@@ -46,7 +49,7 @@ export function createWindowMock(
 
 export interface ResponseMockOptions {
   url: string;
-  type: 'script' | 'stylesheet';
+  type: 'script' | 'stylesheet' | 'document';
   body?: unknown;
 }
 
@@ -68,5 +71,6 @@ export function createResponseMock({ url, body, type }: ResponseMockOptions) {
             : body,
       );
     },
+    allHeaders: mock.fn(() => Promise.resolve({})),
   };
 }

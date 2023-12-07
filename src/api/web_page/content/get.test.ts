@@ -14,9 +14,13 @@ await test('[/api/web_page/content] can successfully create route', () => {
 await test('[/api/web_page/content] can extract content', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
-  const windowMock = createWindowMock({}, { body: { outerHTML: '<body>Hello Secutils.dev and world!</body>' } });
+  const windowMock = createWindowMock();
 
-  const pageMock = createPageMock({ window: windowMock, responses: [] });
+  const pageMock = createPageMock({
+    window: windowMock,
+    responses: [],
+    content: '<body><div>Hello Secutils.dev and world!</div><div>Hello World</div></body>',
+  });
 
   const response = await registerWebPageContentGetRoutes(
     createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
@@ -32,7 +36,7 @@ await test('[/api/web_page/content] can extract content', async (t) => {
     response.body,
     JSON.stringify({
       timestamp: 123,
-      content: '"<body>Hello Secutils.dev and world!</body>"',
+      content: '"<body>\\n    <div>Hello Secutils.dev and world!</div>\\n    <div>Hello World</div>\\n</body>"',
     }),
   );
 
@@ -72,6 +76,7 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
       delay: 0,
       previousContent: '{ "message": "hello" }',
       headers: { Cookie: 'my-cookie' },
+      scripts: { extractContent: 'script' },
     },
   });
 
@@ -100,7 +105,7 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
 
   // Make sure we called includeResource.
   assert.strictEqual(extractContentMock.mock.callCount(), 1);
-  assert.deepEqual(extractContentMock.mock.calls[0].arguments, [{ message: 'hello' }, []]);
+  assert.deepEqual(extractContentMock.mock.calls[0].arguments, [{ message: 'hello' }, [], {}]);
 });
 
 await test('[/api/web_page/content] reports errors in content extractor', async (t) => {
@@ -121,7 +126,12 @@ await test('[/api/web_page/content] reports errors in content extractor', async 
   ).inject({
     method: 'POST',
     url: '/api/web_page/content',
-    payload: { url: 'https://secutils.dev', delay: 0, previousContent: '"previous"' },
+    payload: {
+      url: 'https://secutils.dev',
+      delay: 0,
+      previousContent: '"previous"',
+      scripts: { extractContent: 'script' },
+    },
   });
 
   assert.strictEqual(response.statusCode, 400);
@@ -135,5 +145,5 @@ await test('[/api/web_page/content] reports errors in content extractor', async 
 
   // Make sure we called includeResource.
   assert.strictEqual(extractContentMapMock.mock.callCount(), 1);
-  assert.deepEqual(extractContentMapMock.mock.calls[0].arguments, ['previous', []]);
+  assert.deepEqual(extractContentMapMock.mock.calls[0].arguments, ['previous', [], {}]);
 });

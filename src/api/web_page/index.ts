@@ -7,7 +7,11 @@ import type { ApiRouteParams } from '../api_route_params.js';
 export interface SecutilsWindow extends Window {
   __secutils?: {
     resourceFilterMap?: (resource: WebPageResourceWithRawData) => WebPageResourceWithRawData | null;
-    extractContent?: (previousContent: unknown, externalResources: WebPageResource[]) => Promise<unknown>;
+    extractContent?: (
+      previousContent: unknown,
+      externalResources: WebPageResource[],
+      responseHeaders: Record<string, string>,
+    ) => Promise<unknown>;
   };
 }
 

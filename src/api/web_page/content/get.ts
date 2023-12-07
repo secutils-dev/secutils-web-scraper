@@ -3,7 +3,8 @@ import { setTimeout as setTimeoutAsync } from 'timers/promises';
 
 import jsonStableStringify from 'fast-json-stable-stringify';
 import type { FastifyBaseLogger } from 'fastify';
-import type { Browser, JSHandle } from 'playwright';
+import jsBeautify from 'js-beautify';
+import type { Browser, JSHandle, Page, Response } from 'playwright';
 
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
@@ -11,8 +12,8 @@ import { Diagnostics } from '../../diagnostics.js';
 import { DEFAULT_DELAY_MS, DEFAULT_TIMEOUT_MS } from '../constants.js';
 import type { SecutilsWindow } from '../index.js';
 
-// Maximum size of the content in bytes (100KB).
-const MAX_CONTENT_SIZE_BYTES = 1024 * 100;
+// Maximum size of the content in bytes (200KB).
+const MAX_CONTENT_SIZE_BYTES = 1024 * 200;
 
 /**
  * Defines type of the input parameters.
@@ -153,7 +154,7 @@ async function getContent(
   if (scripts?.extractContent) {
     log.debug(`[${url}] Adding "extractContent" function: ${scripts.extractContent}.`);
     await page.addInitScript({
-      content: `self.__secutils = { async extractContent(previousContent, externalResources) { 
+      content: `self.__secutils = { async extractContent(previousContent, externalResources, responseHeaders) { 
         ${scripts.extractContent} }
       }`,
     });
@@ -203,8 +204,9 @@ async function getContent(
   });
 
   log.debug(`Fetching content for "${url}" (timeout: ${timeout}ms).`);
+  let response: Response | null;
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+    response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
     log.debug(`Page "${url}" is loaded.`);
   } catch (err) {
     const errorMessage = `Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`;
@@ -232,36 +234,10 @@ async function getContent(
   const timestamp = Math.floor(Date.now() / 1000);
   let extractedContent: string;
   try {
-    // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
-    const targetWindow = await page.evaluateHandle<Window>('window');
     extractedContent = jsonStableStringify(
-      await page.evaluate(
-        async ([targetWindow, previousContent, externalResources]) => {
-          const extractContent = targetWindow.__secutils?.extractContent;
-          if (extractContent && typeof extractContent !== 'function') {
-            console.error(`[browser] Invalid "extractContent" function: ${typeof extractContent}`);
-          } else if (extractContent) {
-            console.debug('[browser] Using custom "extractContent" function.');
-          }
-
-          try {
-            return typeof extractContent === 'function'
-              ? (await extractContent(
-                  previousContent !== undefined ? JSON.parse(previousContent) : previousContent,
-                  externalResources,
-                )) ?? null
-              : targetWindow.document.body?.outerHTML ?? null;
-          } catch (err: unknown) {
-            console.error(
-              `[browser] Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`,
-            );
-            console.trace(err);
-
-            throw new Error(`Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
-          }
-        },
-        [targetWindow as JSHandle<SecutilsWindow>, previousContent, externalResources] as const,
-      ),
+      scripts?.extractContent
+        ? await extractContent(page, previousContent, externalResources, (await response?.allHeaders()) ?? {})
+        : jsBeautify.html_beautify(await page.content()),
     );
   } catch (err) {
     log.error(`Failed to extract content for page "${url}: ${Diagnostics.errorMessage(err)}`);
@@ -292,4 +268,39 @@ async function getContent(
   }
 
   return { type: 'success', data: { timestamp, content: extractedContent } };
+}
+
+async function extractContent(
+  page: Page,
+  previousContent: string | undefined,
+  externalResources: WebPageResource[],
+  responseHeaders: Record<string, string>,
+): Promise<unknown> {
+  const targetWindow = await page.evaluateHandle<Window>('window');
+  return await page.evaluate(
+    async ([targetWindow, previousContent, externalResources, responseHeaders]) => {
+      const extractContent = targetWindow.__secutils?.extractContent;
+      if (extractContent && typeof extractContent !== 'function') {
+        console.error(`[browser] Invalid "extractContent" function: ${typeof extractContent}`);
+      } else if (extractContent) {
+        console.debug('[browser] Using custom "extractContent" function.');
+      }
+
+      try {
+        return typeof extractContent === 'function'
+          ? (await extractContent(
+              previousContent !== undefined ? JSON.parse(previousContent) : previousContent,
+              externalResources,
+              responseHeaders,
+            )) ?? null
+          : null;
+      } catch (err: unknown) {
+        console.error(`[browser] Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
+        console.trace(err);
+
+        throw new Error(`Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
+      }
+    },
+    [targetWindow as JSHandle<SecutilsWindow>, previousContent, externalResources, responseHeaders] as const,
+  );
 }
