@@ -153,7 +153,7 @@ async function getResourcesList(
   log: FastifyBaseLogger,
   { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts, headers }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage({ extraHTTPHeaders: headers });
+  const page = await browser.newPage({ extraHTTPHeaders: headers, bypassCSP: true });
 
   // Inject custom scripts if any.
   if (scripts?.resourceFilterMap) {

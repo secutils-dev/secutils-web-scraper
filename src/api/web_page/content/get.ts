@@ -148,7 +148,7 @@ async function getContent(
     headers,
   }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage({ extraHTTPHeaders: headers });
+  const page = await browser.newPage({ extraHTTPHeaders: headers, bypassCSP: true });
 
   // Inject custom scripts if any.
   if (scripts?.extractContent) {

@@ -298,7 +298,9 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
   ]);
 
   assert.strictEqual(browserMock.newPage.mock.callCount(), 1);
-  assert.deepEqual(browserMock.newPage.mock.calls[0].arguments, [{ extraHTTPHeaders: { Cookie: 'my-cookie' } }]);
+  assert.deepEqual(browserMock.newPage.mock.calls[0].arguments, [
+    { extraHTTPHeaders: { Cookie: 'my-cookie' }, bypassCSP: true },
+  ]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
