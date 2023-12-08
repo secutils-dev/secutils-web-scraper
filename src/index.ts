@@ -30,6 +30,7 @@ async function runBrowser(serverInstance: FastifyInstance) {
       executablePath: process.env.SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH || undefined,
       headless,
       chromiumSandbox,
+      args: ['--disable-web-security'],
     });
     serverInstance.log.info(`Successfully run browser (headless: ${headless}, sandbox: ${chromiumSandbox}).`);
     return browserToRun;
