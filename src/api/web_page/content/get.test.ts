@@ -58,7 +58,7 @@ await test('[/api/web_page/content] can extract content', async (t) => {
 
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
-  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 5000 }]);
+  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 10000 }]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
@@ -147,7 +147,7 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
 
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
-  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 5000 }]);
+  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 10000 }]);
 
   assert.strictEqual(browserMock.newContext.mock.callCount(), 1);
   assert.deepEqual(browserMock.newContext.mock.calls[0].arguments, [

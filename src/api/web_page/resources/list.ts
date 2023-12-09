@@ -22,7 +22,7 @@ interface InputBodyParamsType {
   url: string;
 
   /**
-   * Number of milliseconds to wait until page enters "idle" state. Default is 5000ms.
+   * Number of milliseconds to wait until page enters "idle" state. Default is 10000ms.
    */
   timeout?: number;
 
