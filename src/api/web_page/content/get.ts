@@ -148,7 +148,21 @@ async function getContent(
     headers,
   }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage({ extraHTTPHeaders: headers, bypassCSP: true });
+  const context = await browser.newContext({ extraHTTPHeaders: headers, bypassCSP: false });
+  const page = await context.newPage();
+
+  // Disable browser cache.
+  const cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Network.clearBrowserCache');
+  await cdpSession.send('Network.setCacheDisabled', { cacheDisabled: true });
+
+  // Set up a proxy URL to load resources bypassing CORS and CSP.
+  await page.route('**/proxy.secutils.dev/*', async (route) => {
+    const response = await route.fetch({
+      url: decodeURIComponent(new URL(route.request().url()).pathname.replace('/proxy.secutils.dev/', '')),
+    });
+    await route.fulfill({ response });
+  });
 
   // Inject custom scripts if any.
   if (scripts?.extractContent) {
@@ -206,7 +220,7 @@ async function getContent(
   log.debug(`Fetching content for "${url}" (timeout: ${timeout}ms).`);
   let response: Response | null;
   try {
-    response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+    response = await page.goto(url, { timeout });
     log.debug(`Page "${url}" is loaded.`);
   } catch (err) {
     const errorMessage = `Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`;

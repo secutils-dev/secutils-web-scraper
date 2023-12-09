@@ -6,7 +6,14 @@ import type { Browser } from 'playwright/index.js';
 
 import type { WebPageResourceWithRawData } from './list.js';
 import { registerWebPageResourcesListRoutes } from './list.js';
-import { createBrowserMock, createPageMock, createResponseMock, createWindowMock } from '../../../mocks.js';
+import {
+  createBrowserContextMock,
+  createBrowserMock,
+  createCDPSessionMock,
+  createPageMock,
+  createResponseMock,
+  createWindowMock,
+} from '../../../mocks.js';
 import { createMock } from '../../api_route_params.mocks.js';
 
 await test('[/api/web_page/resources] can successfully create route', () => {
@@ -79,9 +86,11 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
       }),
     ],
   });
+  const cdpSessionMock = createCDPSessionMock();
+  const browserContextMock = createBrowserContextMock(pageMock, cdpSessionMock);
 
   const response = await registerWebPageResourcesListRoutes(
-    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
+    createMock({ browser: createBrowserMock(browserContextMock) as unknown as Browser }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/resources',
@@ -194,12 +203,14 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
     }),
   );
 
+  // Make sure we cleared the cache.
+  assert.strictEqual(cdpSessionMock.send.mock.callCount(), 2);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[0].arguments, ['Network.clearBrowserCache']);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[1].arguments, ['Network.setCacheDisabled', { cacheDisabled: true }]);
+
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
-  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, [
-    'https://secutils.dev',
-    { waitUntil: 'domcontentloaded', timeout: 5000 },
-  ]);
+  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 5000 }]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
   assert.strictEqual(pageMock.waitForSelector.mock.callCount(), 0);
@@ -247,8 +258,9 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
       }),
     ],
   });
+  const browserContextMock = createBrowserContextMock(pageMock);
 
-  const browserMock = createBrowserMock(pageMock);
+  const browserMock = createBrowserMock(browserContextMock);
   const response = await registerWebPageResourcesListRoutes(
     createMock({ browser: browserMock as unknown as Browser }),
   ).inject({
@@ -292,14 +304,11 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
 
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
-  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, [
-    'https://secutils.dev',
-    { waitUntil: 'domcontentloaded', timeout: 5000 },
-  ]);
+  assert.deepEqual(pageMock.goto.mock.calls[0].arguments, ['https://secutils.dev', { timeout: 5000 }]);
 
-  assert.strictEqual(browserMock.newPage.mock.callCount(), 1);
-  assert.deepEqual(browserMock.newPage.mock.calls[0].arguments, [
-    { extraHTTPHeaders: { Cookie: 'my-cookie' }, bypassCSP: true },
+  assert.strictEqual(browserMock.newContext.mock.callCount(), 1);
+  assert.deepEqual(browserMock.newContext.mock.calls[0].arguments, [
+    { extraHTTPHeaders: { Cookie: 'my-cookie' }, bypassCSP: false },
   ]);
 
   // Make sure we didn't wait for a selector since it wasn't specified.
@@ -355,9 +364,10 @@ await test('[/api/web_page/resources] reports errors in resource filters', async
     window: windowMock,
     responses: [],
   });
+  const browserContextMock = createBrowserContextMock(pageMock);
 
   const response = await registerWebPageResourcesListRoutes(
-    createMock({ browser: createBrowserMock(pageMock) as unknown as Browser }),
+    createMock({ browser: createBrowserMock(browserContextMock) as unknown as Browser }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/resources',

@@ -2,10 +2,27 @@ import { mock } from 'node:test';
 
 import type { SecutilsWindow } from './api/web_page/index.js';
 
-export function createBrowserMock(pageMock?: ReturnType<typeof createPageMock>) {
+export function createBrowserMock(browserContextMock?: BrowserContextMock) {
   return {
     isConnected: mock.fn(() => false),
-    newPage: mock.fn(() => pageMock ?? createPageMock()),
+    newContext: mock.fn(() => Promise.resolve(browserContextMock ?? createBrowserContextMock())),
+  };
+}
+
+export type BrowserContextMock = ReturnType<typeof createBrowserContextMock>;
+export function createBrowserContextMock(
+  pageMock?: ReturnType<typeof createPageMock>,
+  cdpSessionMock?: ReturnType<typeof createCDPSessionMock>,
+) {
+  return {
+    newCDPSession: mock.fn(() => Promise.resolve(cdpSessionMock ?? createCDPSessionMock())),
+    newPage: mock.fn(() => Promise.resolve(pageMock ?? createPageMock())),
+  };
+}
+
+export function createCDPSessionMock() {
+  return {
+    send: mock.fn(() => Promise.resolve()),
   };
 }
 
@@ -28,6 +45,7 @@ export function createPageMock({ window = createWindowMock(), responses = [], co
     content: mock.fn(() => Promise.resolve(content)),
     addInitScript: mock.fn(),
     waitForSelector: mock.fn(),
+    route: mock.fn(),
     evaluateHandle: mock.fn(() => window),
     evaluate: mock.fn((fn: (args: unknown) => Promise<unknown>, args: unknown) => fn(args)),
   };

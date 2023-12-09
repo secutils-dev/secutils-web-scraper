@@ -153,7 +153,13 @@ async function getResourcesList(
   log: FastifyBaseLogger,
   { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts, headers }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const page = await browser.newPage({ extraHTTPHeaders: headers, bypassCSP: true });
+  const context = await browser.newContext({ extraHTTPHeaders: headers, bypassCSP: false });
+  const page = await context.newPage();
+
+  // Disable browser cache.
+  const cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Network.clearBrowserCache');
+  await cdpSession.send('Network.setCacheDisabled', { cacheDisabled: true });
 
   // Inject custom scripts if any.
   if (scripts?.resourceFilterMap) {
@@ -207,7 +213,7 @@ async function getResourcesList(
 
   log.debug(`Fetching resources for "${url}" (timeout: ${timeout}ms).`);
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+    await page.goto(url, { timeout });
     log.debug(`Page "${url}" is loaded.`);
   } catch (err) {
     const errorMessage = `Failed to load page "${url}": ${Diagnostics.errorMessage(err)}`;
