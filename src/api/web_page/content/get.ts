@@ -6,6 +6,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import jsBeautify from 'js-beautify';
 import type { Browser, JSHandle, Page, Response } from 'playwright';
 
+import { createObjectHash } from '../../../utilities/index.js';
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
@@ -105,9 +106,7 @@ export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser 
       },
     },
     async (request, reply) => {
-      const cacheKey = `${request.body.url}:${request.body.waitSelector ?? '-'}:${
-        request.body.delay?.toString() ?? '-'
-      }`;
+      const cacheKey = createObjectHash(request.body);
       if (!cache.has(cacheKey)) {
         const browser = await acquireBrowser();
         const log = server.log.child({ provider: 'web_page_content_get' });

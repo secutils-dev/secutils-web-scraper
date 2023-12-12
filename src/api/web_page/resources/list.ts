@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { Browser, JSHandle } from 'playwright';
 
 import type { WebPageResource, WebPageResourceContent, WebPageResourceContentData } from './web_page_resource.js';
+import { createObjectHash } from '../../../utilities/index.js';
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
@@ -117,9 +118,7 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
       },
     },
     async (request, reply) => {
-      const cacheKey = `${request.body.url}:${request.body.waitSelector ?? '-'}:${
-        request.body.delay?.toString() ?? '-'
-      }`;
+      const cacheKey = createObjectHash(request.body);
       if (!cache.has(cacheKey)) {
         const browser = await acquireBrowser();
         const log = server.log.child({ provider: 'web_page_resources_list' });
