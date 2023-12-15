@@ -1,5 +1,7 @@
 import { mock } from 'node:test';
 
+import type { Protocol } from 'playwright-core/types/protocol.js';
+
 import type { SecutilsWindow } from './api/web_page/index.js';
 
 export function createBrowserMock(browserContextMock?: BrowserContextMock) {
@@ -20,9 +22,42 @@ export function createBrowserContextMock(
   };
 }
 
-export function createCDPSessionMock() {
+export interface CDPResourceMock {
+  url: string;
+  resourceType: Protocol.Network.ResourceType;
+  body: string;
+}
+
+export function createCDPSessionMock(resources: CDPResourceMock[] = []) {
+  let requestPausedHandler: (response: unknown) => Promise<void>;
   return {
-    send: mock.fn(() => Promise.resolve()),
+    on: mock.fn((eventName: string, handler: (response: unknown) => Promise<void>) => {
+      if (eventName === 'Fetch.requestPaused') {
+        requestPausedHandler = handler;
+      }
+    }),
+    send: mock.fn(async (methodName: string, args: unknown) => {
+      if (methodName === 'Fetch.getResponseBody') {
+        const getResponseBodyArgs = args as { requestId: string };
+        return Promise.resolve({
+          body: Buffer.from(resources[Number(getResponseBodyArgs.requestId)].body).toString('base64'),
+          base64Encoded: true,
+        });
+      }
+
+      if (requestPausedHandler && methodName === 'Fetch.disable') {
+        let index = 0;
+        for (const resource of resources) {
+          await requestPausedHandler({
+            requestId: (index++).toString(),
+            responseStatusCode: 200,
+            request: { url: resource.url, resourceType: resource.resourceType },
+          });
+        }
+      }
+
+      return Promise.resolve();
+    }),
   };
 }
 

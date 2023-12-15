@@ -48,9 +48,19 @@ await test('[/api/web_page/content] can extract content', async (t) => {
   );
 
   // Make sure we cleared the cache.
-  assert.strictEqual(cdpSessionMock.send.mock.callCount(), 2);
+  assert.strictEqual(cdpSessionMock.send.mock.callCount(), 4);
   assert.deepEqual(cdpSessionMock.send.mock.calls[0].arguments, ['Network.clearBrowserCache']);
   assert.deepEqual(cdpSessionMock.send.mock.calls[1].arguments, ['Network.setCacheDisabled', { cacheDisabled: true }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[2].arguments, [
+    'Fetch.enable',
+    {
+      patterns: [
+        { resourceType: 'Script', requestStage: 'Response' },
+        { resourceType: 'Stylesheet', requestStage: 'Response' },
+      ],
+    },
+  ]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[3].arguments, ['Fetch.disable']);
 
   // Maure we set up a proxy URL to load resources bypassing CORS and CSP.
   assert.strictEqual(pageMock.route.mock.callCount(), 1);

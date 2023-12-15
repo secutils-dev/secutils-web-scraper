@@ -17,7 +17,15 @@ let browser: Browser | undefined;
 let browserShutdownTimer: NodeJS.Timeout | undefined;
 // Cache with 20 minutes TTL.
 const cache = new NodeCache({ stdTTL: config.cacheTTLSec });
-const server = fastify({ logger: { level: process.env.SECUTILS_WEB_SCRAPER_LOG_LEVEL ?? 'debug' } })
+const server = fastify({
+  logger:
+    process.env.NODE_ENV === 'production'
+      ? { level: process.env.SECUTILS_WEB_SCRAPER_LOG_LEVEL ?? 'debug' }
+      : {
+          level: process.env.SECUTILS_WEB_SCRAPER_LOG_LEVEL ?? 'debug',
+          transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' } },
+        },
+})
   .register(fastifyCompress)
   .addHook('onClose', (instance) => stopBrowser(instance));
 

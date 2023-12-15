@@ -11,7 +11,6 @@ import {
   createBrowserMock,
   createCDPSessionMock,
   createPageMock,
-  createResponseMock,
   createWindowMock,
 } from '../../../mocks.js';
 import { createMock } from '../../api_route_params.mocks.js';
@@ -68,25 +67,25 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
 
   const pageMock = createPageMock({
     window: windowMock,
-    responses: [
-      createResponseMock({
-        url: 'https://secutils.dev/script.js',
-        body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
-        type: 'script',
-      }),
-      createResponseMock({
-        url: 'https://secutils.dev/weird-script.js',
-        body: `window.document.body.innerHTML = "Hello Secutils.dev and world!";`,
-        type: 'script',
-      }),
-      createResponseMock({
-        url: 'https://secutils.dev/fonts.css',
-        body: '* { color: blue-ish-not-valid; font-size: 100500; }',
-        type: 'stylesheet',
-      }),
-    ],
+    responses: [],
   });
-  const cdpSessionMock = createCDPSessionMock();
+  const cdpSessionMock = createCDPSessionMock([
+    {
+      url: 'https://secutils.dev/script.js',
+      body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+      resourceType: 'Script',
+    },
+    {
+      url: 'https://secutils.dev/weird-script.js',
+      body: `window.document.body.innerHTML = "Hello Secutils.dev and world!";`,
+      resourceType: 'Script',
+    },
+    {
+      url: 'https://secutils.dev/fonts.css',
+      body: '* { color: blue-ish-not-valid; font-size: 100500; }',
+      resourceType: 'Stylesheet',
+    },
+  ]);
   const browserContextMock = createBrowserContextMock(pageMock, cdpSessionMock);
 
   const response = await registerWebPageResourcesListRoutes(
@@ -204,9 +203,25 @@ await test('[/api/web_page/resources] can parse resources', async (t) => {
   );
 
   // Make sure we cleared the cache.
-  assert.strictEqual(cdpSessionMock.send.mock.callCount(), 2);
+  assert.strictEqual(cdpSessionMock.send.mock.callCount(), 10);
   assert.deepEqual(cdpSessionMock.send.mock.calls[0].arguments, ['Network.clearBrowserCache']);
   assert.deepEqual(cdpSessionMock.send.mock.calls[1].arguments, ['Network.setCacheDisabled', { cacheDisabled: true }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[2].arguments, [
+    'Fetch.enable',
+    {
+      patterns: [
+        { resourceType: 'Script', requestStage: 'Response' },
+        { resourceType: 'Stylesheet', requestStage: 'Response' },
+      ],
+    },
+  ]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[3].arguments, ['Fetch.getResponseBody', { requestId: '0' }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[4].arguments, ['Fetch.disable']);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[5].arguments, ['Fetch.continueRequest', { requestId: '0' }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[6].arguments, ['Fetch.getResponseBody', { requestId: '1' }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[7].arguments, ['Fetch.continueRequest', { requestId: '1' }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[8].arguments, ['Fetch.getResponseBody', { requestId: '2' }]);
+  assert.deepEqual(cdpSessionMock.send.mock.calls[9].arguments, ['Fetch.continueRequest', { requestId: '2' }]);
 
   // Make sure we loaded correct page.
   assert.strictEqual(pageMock.goto.mock.callCount(), 1);
@@ -243,22 +258,20 @@ await test('[/api/web_page/resources] can inject resource filters', async (t) =>
     return [];
   });
 
-  const pageMock = createPageMock({
-    window: windowMock,
-    responses: [
-      createResponseMock({
-        url: 'https://secutils.dev/script.js',
-        body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
-        type: 'script',
-      }),
-      createResponseMock({
-        url: 'https://secutils.dev/fonts.css',
-        body: '* { color: blue-ish-not-valid; font-size: 100500; }',
-        type: 'stylesheet',
-      }),
-    ],
-  });
-  const browserContextMock = createBrowserContextMock(pageMock);
+  const pageMock = createPageMock({ window: windowMock });
+  const cdpSessionMock = createCDPSessionMock([
+    {
+      url: 'https://secutils.dev/script.js',
+      body: 'window.document.body.innerHTML = "Hello Secutils.dev and world!";',
+      resourceType: 'Script',
+    },
+    {
+      url: 'https://secutils.dev/fonts.css',
+      body: '* { color: blue-ish-not-valid; font-size: 100500; }',
+      resourceType: 'Stylesheet',
+    },
+  ]);
+  const browserContextMock = createBrowserContextMock(pageMock, cdpSessionMock);
 
   const browserMock = createBrowserMock(browserContextMock);
   const response = await registerWebPageResourcesListRoutes(

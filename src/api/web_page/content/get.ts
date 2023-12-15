@@ -11,6 +11,7 @@ import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
 import { DEFAULT_DELAY_MS, DEFAULT_TIMEOUT_MS } from '../constants.js';
+import { type FetchedResource, FetchInterceptor } from '../fetch_interceptor.js';
 import type { SecutilsWindow } from '../index.js';
 
 // Maximum size of the content in bytes (200KB).
@@ -68,12 +69,6 @@ interface InputBodyParamsType {
 interface OutputBodyType {
   timestamp: number;
   content: string;
-}
-
-export interface WebPageResource {
-  url: string;
-  data: string;
-  type: 'script' | 'stylesheet';
 }
 
 export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser }: ApiRouteParams) {
@@ -155,6 +150,9 @@ async function getContent(
   await cdpSession.send('Network.clearBrowserCache');
   await cdpSession.send('Network.setCacheDisabled', { cacheDisabled: true });
 
+  const fetchInterceptor = new FetchInterceptor({ log, pageUrl: url, session: cdpSession });
+  await fetchInterceptor.start();
+
   // Set up a proxy URL to load resources bypassing CORS and CSP.
   await page.route('**/proxy.secutils.dev/*', async (route) => {
     const response = await route.fetch({
@@ -183,37 +181,6 @@ async function getContent(
     } else if (msg.type() === 'trace') {
       log.error(msg.text());
     }
-  });
-
-  const externalResources: Array<WebPageResource> = [];
-  page.on('response', (response) => {
-    const request = response.request();
-    const resourceType = request.resourceType() as 'script' | 'stylesheet';
-    if (
-      request.isNavigationRequest() ||
-      request.method() !== 'GET' ||
-      (resourceType !== 'script' && resourceType !== 'stylesheet')
-    ) {
-      return;
-    }
-
-    response.body().then(
-      (responseBody) => {
-        log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
-        externalResources.push({
-          url: response.url(),
-          data: responseBody.toString('utf-8'),
-          type: resourceType,
-        });
-      },
-      (err) => {
-        log.error(
-          `Failed to fetch external resource "${response.url()}" body for page "${url}": ${Diagnostics.errorMessage(
-            err,
-          )}`,
-        );
-      },
-    );
   });
 
   log.debug(`Fetching content for "${url}" (timeout: ${timeout}ms).`);
@@ -247,6 +214,7 @@ async function getContent(
   const timestamp = Math.floor(Date.now() / 1000);
   let extractedContent: string;
   try {
+    const externalResources = await fetchInterceptor.stop();
     extractedContent = jsonStableStringify(
       scripts?.extractContent
         ? await extractContent(page, previousContent, externalResources, (await response?.allHeaders()) ?? {})
@@ -275,6 +243,7 @@ async function getContent(
 
   try {
     await page.close();
+    await context.close();
     log.debug(`Closed page "${url}".`);
   } catch (err) {
     log.error(`Failed to close page "${url}": ${Diagnostics.errorMessage(err)}`);
@@ -286,7 +255,7 @@ async function getContent(
 async function extractContent(
   page: Page,
   previousContent: string | undefined,
-  externalResources: WebPageResource[],
+  externalResources: FetchedResource[],
   responseHeaders: Record<string, string>,
 ): Promise<unknown> {
   const targetWindow = await page.evaluateHandle<Window>('window');

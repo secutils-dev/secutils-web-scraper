@@ -11,6 +11,8 @@ import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
 import { tlsHash } from '../../tls_hash.js';
 import { DEFAULT_DELAY_MS, DEFAULT_TIMEOUT_MS } from '../constants.js';
+import type { FetchedResource } from '../fetch_interceptor.js';
+import { FetchInterceptor } from '../fetch_interceptor.js';
 import type { SecutilsWindow } from '../index.js';
 
 /**
@@ -160,6 +162,9 @@ async function getResourcesList(
   await cdpSession.send('Network.clearBrowserCache');
   await cdpSession.send('Network.setCacheDisabled', { cacheDisabled: true });
 
+  const fetchInterceptor = new FetchInterceptor({ log, pageUrl: url, session: cdpSession });
+  await fetchInterceptor.start();
+
   // Inject custom scripts if any.
   if (scripts?.resourceFilterMap) {
     log.debug(`[${url}] Adding "resourceFilterMap" function: ${scripts.resourceFilterMap}.`);
@@ -176,38 +181,6 @@ async function getResourcesList(
         log.error(msg.text());
       }
     }
-  });
-
-  const externalResources: Array<Omit<WebPageResourceWithRawData, 'url'> & { url: string; processed: boolean }> = [];
-  page.on('response', (response) => {
-    const request = response.request();
-    const resourceType = request.resourceType() as 'script' | 'stylesheet';
-    if (
-      request.isNavigationRequest() ||
-      request.method() !== 'GET' ||
-      (resourceType !== 'script' && resourceType !== 'stylesheet')
-    ) {
-      return;
-    }
-
-    response.body().then(
-      (responseBody) => {
-        log.debug(`Page loaded resource (${responseBody.byteLength} bytes): ${response.url()}.`);
-        externalResources.push({
-          url: response.url(),
-          data: responseBody.toString('utf-8'),
-          type: resourceType,
-          processed: false,
-        });
-      },
-      (err) => {
-        log.error(
-          `Failed to fetch external resource "${response.url()}" body for page "${url}": ${Diagnostics.errorMessage(
-            err,
-          )}`,
-        );
-      },
-    );
   });
 
   log.debug(`Fetching resources for "${url}" (timeout: ${timeout}ms).`);
@@ -241,6 +214,9 @@ async function getResourcesList(
   let extractedResources: WebPageResourceWithRawData[];
   try {
     // Pass `window` handle as parameter to be able to shim/mock DOM APIs that aren't available in Node.js.
+    const externalResources: Array<FetchedResource & { processed: boolean }> = (await fetchInterceptor.stop()).map(
+      (res) => ({ ...res, processed: false }),
+    );
     const targetWindow = await page.evaluateHandle<Window>('window');
     extractedResources = await page.evaluate(
       async ([targetWindow, externalResources]) => {
@@ -429,6 +405,7 @@ async function getResourcesList(
 
   try {
     await page.close();
+    await context.close();
     log.debug(`Closed page "${url}".`);
   } catch (err) {
     log.error(`Failed to close page "${url}": ${Diagnostics.errorMessage(err)}`);
