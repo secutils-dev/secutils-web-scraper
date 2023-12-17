@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM node:20-alpine3.18 as BUILDER
+FROM --platform=$BUILDPLATFORM node:20-alpine3.19 as BUILDER
 WORKDIR /app
 COPY ["./*.json", "./"]
 RUN set -x && npm ci
@@ -8,7 +8,7 @@ COPY ["./src", "./src"]
 RUN set -x && npm test
 RUN set -x && npm run build
 
-FROM node:20-alpine3.18
+FROM node:20-alpine3.19
 ENV NODE_ENV=production \
     SECUTILS_WEB_SCRAPER_BROWSER_EXECUTABLE_PATH="/usr/bin/chromium-browser"
 WORKDIR /app
