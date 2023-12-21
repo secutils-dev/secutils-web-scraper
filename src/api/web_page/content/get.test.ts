@@ -4,6 +4,7 @@ import { mock, test } from 'node:test';
 import type { Browser } from 'playwright/index.js';
 
 import { registerWebPageContentGetRoutes } from './get.js';
+import type { WebPageContext } from './web_page_context.js';
 import {
   createBrowserContextMock,
   createBrowserMock,
@@ -119,8 +120,8 @@ await test('[/api/web_page/content] can proxy requests', async () => {
 await test('[/api/web_page/content] can inject content extractor', async (t) => {
   t.mock.method(Date, 'now', () => 123000);
 
-  const extractContentMock = mock.fn((previousContent: unknown) => {
-    return Promise.resolve({ message: (previousContent as { message: string }).message.toUpperCase() });
+  const extractContentMock = mock.fn((context: WebPageContext) => {
+    return Promise.resolve({ message: (context.previous as { message: string }).message.toUpperCase() });
   });
 
   const windowMock = createWindowMock({ __secutils: { extractContent: extractContentMock } });
@@ -170,7 +171,9 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
 
   // Make sure we called includeResource.
   assert.strictEqual(extractContentMock.mock.callCount(), 1);
-  assert.deepEqual(extractContentMock.mock.calls[0].arguments, [{ message: 'hello' }, [], {}]);
+  assert.deepEqual(extractContentMock.mock.calls[0].arguments, [
+    { previous: { message: 'hello' }, externalResources: [], responseHeaders: {} },
+  ]);
 });
 
 await test('[/api/web_page/content] reports errors in content extractor', async (t) => {
@@ -211,5 +214,7 @@ await test('[/api/web_page/content] reports errors in content extractor', async 
 
   // Make sure we called includeResource.
   assert.strictEqual(extractContentMapMock.mock.callCount(), 1);
-  assert.deepEqual(extractContentMapMock.mock.calls[0].arguments, ['previous', [], {}]);
+  assert.deepEqual(extractContentMapMock.mock.calls[0].arguments, [
+    { previous: 'previous', externalResources: [], responseHeaders: {} },
+  ]);
 });

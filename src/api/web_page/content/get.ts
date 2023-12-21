@@ -6,12 +6,13 @@ import type { FastifyBaseLogger } from 'fastify';
 import jsBeautify from 'js-beautify';
 import type { Browser, JSHandle, Page, Response } from 'playwright';
 
+import type { WebPageContext } from './web_page_context.js';
 import { createObjectHash } from '../../../utilities/index.js';
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
 import { Diagnostics } from '../../diagnostics.js';
 import { DEFAULT_DELAY_MS, DEFAULT_TIMEOUT_MS } from '../constants.js';
-import { type FetchedResource, FetchInterceptor } from '../fetch_interceptor.js';
+import { FetchInterceptor } from '../fetch_interceptor.js';
 import type { SecutilsWindow } from '../index.js';
 
 // Maximum size of the content in bytes (200KB).
@@ -169,9 +170,7 @@ async function getContent(
   if (scripts?.extractContent) {
     log.debug(`[${url}] Adding "extractContent" function: ${scripts.extractContent}.`);
     await page.addInitScript({
-      content: `self.__secutils = { async extractContent(previousContent, externalResources, responseHeaders) { 
-        ${scripts.extractContent} }
-      }`,
+      content: `self.__secutils = { async extractContent(context) { ${scripts.extractContent} } };`,
     });
   }
 
@@ -221,7 +220,11 @@ async function getContent(
     const externalResources = await fetchInterceptor.stop();
     extractedContent = jsonStableStringify(
       scripts?.extractContent
-        ? await extractContent(page, previousContent, externalResources, (await response?.allHeaders()) ?? {})
+        ? await extractContent(page, {
+            previous: previousContent,
+            externalResources,
+            responseHeaders: (await response?.allHeaders()) ?? {},
+          })
         : jsBeautify.html_beautify(await page.content()),
     );
   } catch (err) {
@@ -256,15 +259,10 @@ async function getContent(
   return { type: 'success', data: { timestamp, content: extractedContent } };
 }
 
-async function extractContent(
-  page: Page,
-  previousContent: string | undefined,
-  externalResources: FetchedResource[],
-  responseHeaders: Record<string, string>,
-): Promise<unknown> {
+async function extractContent(page: Page, context: WebPageContext<string>): Promise<unknown> {
   const targetWindow = await page.evaluateHandle<Window>('window');
   return await page.evaluate(
-    async ([targetWindow, previousContent, externalResources, responseHeaders]) => {
+    async ([targetWindow, context]) => {
       const extractContent = targetWindow.__secutils?.extractContent;
       if (extractContent && typeof extractContent !== 'function') {
         console.error(`[browser] Invalid "extractContent" function: ${typeof extractContent}`);
@@ -274,11 +272,10 @@ async function extractContent(
 
       try {
         return typeof extractContent === 'function'
-          ? (await extractContent(
-              previousContent !== undefined ? JSON.parse(previousContent) : previousContent,
-              externalResources,
-              responseHeaders,
-            )) ?? null
+          ? (await extractContent({
+              ...context,
+              previous: context.previous !== undefined ? JSON.parse(context.previous) : context.previous,
+            })) ?? null
           : null;
       } catch (err: unknown) {
         console.error(`[browser] Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
@@ -287,6 +284,6 @@ async function extractContent(
         throw new Error(`Content extractor script has thrown an exception: ${(err as Error)?.message ?? err}.`);
       }
     },
-    [targetWindow as JSHandle<SecutilsWindow>, previousContent, externalResources, responseHeaders] as const,
+    [targetWindow as JSHandle<SecutilsWindow>, context] as const,
   );
 }
