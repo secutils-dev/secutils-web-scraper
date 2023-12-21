@@ -101,7 +101,11 @@ export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser 
       },
     },
     async (request, reply) => {
-      const cacheKey = createObjectHash(request.body);
+      const cacheKey = createObjectHash({
+        url: request.body.url,
+        headers: request.body.headers,
+        scripts: request.body.scripts,
+      });
       if (!cache.has(cacheKey)) {
         const browser = await acquireBrowser();
         const log = server.log.child({ provider: 'web_page_content_get' });
