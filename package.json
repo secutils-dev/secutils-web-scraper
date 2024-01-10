@@ -10,7 +10,7 @@
     "node": "20.x"
   },
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
     "prebuild": "eslint . && rm -rf dist",
     "build": "tsc --project ./",
