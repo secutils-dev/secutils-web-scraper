@@ -5,6 +5,7 @@ import type { Browser } from 'playwright/index.js';
 
 import { registerWebPageContentGetRoutes } from './get.js';
 import type { WebPageContext } from './web_page_context.js';
+import { configure } from '../../../config.js';
 import {
   createBrowserContextMock,
   createBrowserMock,
@@ -133,7 +134,10 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
 
   const browserMock = createBrowserMock(browserContextMock);
   const response = await registerWebPageContentGetRoutes(
-    createMock({ browser: browserMock as unknown as Browser }),
+    createMock({
+      browser: browserMock as unknown as Browser,
+      config: { ...configure(), userAgent: 'secutils/1.0.0' },
+    }),
   ).inject({
     method: 'POST',
     url: '/api/web_page/content',
@@ -162,7 +166,11 @@ await test('[/api/web_page/content] can inject content extractor', async (t) => 
 
   assert.strictEqual(browserMock.newContext.mock.callCount(), 1);
   assert.deepEqual(browserMock.newContext.mock.calls[0].arguments, [
-    { extraHTTPHeaders: { Cookie: 'my-cookie' }, bypassCSP: false },
+    {
+      extraHTTPHeaders: { Cookie: 'my-cookie' },
+      bypassCSP: false,
+      userAgent: 'secutils/1.0.0',
+    },
   ]);
   assert.strictEqual(browserContextMock.newPage.mock.callCount(), 1);
 

@@ -19,6 +19,7 @@ export function createBrowserContextMock(
   return {
     newCDPSession: mock.fn(() => Promise.resolve(cdpSessionMock ?? createCDPSessionMock())),
     newPage: mock.fn(() => Promise.resolve(pageMock ?? createPageMock())),
+    close: mock.fn(),
   };
 }
 

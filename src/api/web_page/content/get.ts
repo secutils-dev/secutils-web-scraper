@@ -7,6 +7,7 @@ import jsBeautify from 'js-beautify';
 import type { Browser, JSHandle, Page, Response } from 'playwright';
 
 import type { WebPageContext } from './web_page_context.js';
+import type { Config } from '../../../config.js';
 import { createObjectHash } from '../../../utilities/index.js';
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
@@ -72,7 +73,7 @@ interface OutputBodyType {
   content: string;
 }
 
-export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser }: ApiRouteParams) {
+export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser, config }: ApiRouteParams) {
   return server.post<{ Body: InputBodyParamsType }>(
     '/api/web_page/content',
     {
@@ -111,7 +112,7 @@ export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser 
         const browser = await acquireBrowser();
         const log = server.log.child({ provider: 'web_page_content_get' });
         try {
-          const result = await getContent(browser, log, request.body);
+          const result = await getContent(config, browser, log, request.body);
           if (result.type === 'client-error') {
             log.error(`Cannot retrieve content for page "${request.body.url}" due to client error: ${result.error}`);
             await Diagnostics.screenshot(log, browser);
@@ -135,6 +136,7 @@ export function registerWebPageContentGetRoutes({ server, cache, acquireBrowser 
 }
 
 async function getContent(
+  config: Config,
   browser: Browser,
   log: FastifyBaseLogger,
   {
@@ -147,7 +149,11 @@ async function getContent(
     headers,
   }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const context = await browser.newContext({ extraHTTPHeaders: headers, bypassCSP: false });
+  const context = await browser.newContext({
+    extraHTTPHeaders: headers,
+    bypassCSP: false,
+    userAgent: config.userAgent,
+  });
   const page = await context.newPage();
 
   // Disable browser cache.

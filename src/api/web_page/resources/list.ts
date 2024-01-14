@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { Browser, JSHandle } from 'playwright';
 
 import type { WebPageResource, WebPageResourceContent, WebPageResourceContentData } from './web_page_resource.js';
+import type { Config } from '../../../config.js';
 import { createObjectHash } from '../../../utilities/index.js';
 import type { ApiResult } from '../../api_result.js';
 import type { ApiRouteParams } from '../../api_route_params.js';
@@ -91,7 +92,7 @@ const RESOURCES_SCHEMA = {
   },
 };
 
-export function registerWebPageResourcesListRoutes({ server, cache, acquireBrowser }: ApiRouteParams) {
+export function registerWebPageResourcesListRoutes({ server, cache, acquireBrowser, config }: ApiRouteParams) {
   return server.post<{ Body: InputBodyParamsType }>(
     '/api/web_page/resources',
     {
@@ -130,7 +131,7 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
         const log = server.log.child({ provider: 'web_page_resources_list' });
 
         try {
-          const result = await getResourcesList(browser, log, request.body);
+          const result = await getResourcesList(config, browser, log, request.body);
           if (result.type === 'client-error') {
             log.error(`Cannot retrieve resources for page "${request.body.url}" due to client error: ${result.error}`);
             await Diagnostics.screenshot(log, browser);
@@ -154,11 +155,16 @@ export function registerWebPageResourcesListRoutes({ server, cache, acquireBrows
 }
 
 async function getResourcesList(
+  config: Config,
   browser: Browser,
   log: FastifyBaseLogger,
   { url, waitSelector, timeout = DEFAULT_TIMEOUT_MS, delay = DEFAULT_DELAY_MS, scripts, headers }: InputBodyParamsType,
 ): Promise<ApiResult<OutputBodyType>> {
-  const context = await browser.newContext({ extraHTTPHeaders: headers, bypassCSP: false });
+  const context = await browser.newContext({
+    extraHTTPHeaders: headers,
+    bypassCSP: false,
+    userAgent: config.userAgent,
+  });
   const page = await context.newPage();
 
   // Disable browser cache.

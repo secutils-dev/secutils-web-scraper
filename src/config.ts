@@ -7,6 +7,7 @@ export interface Config {
   port: number;
   cacheTTLSec: number;
   browserTTLSec: number;
+  userAgent?: string;
 }
 
 export function configure(): Config {
@@ -17,5 +18,6 @@ export function configure(): Config {
     port: +(process.env.SECUTILS_WEB_SCRAPER_PORT ?? 0) || 7272,
     cacheTTLSec: +(process.env.SECUTILS_WEB_SCRAPER_CACHE_TTL_SEC ?? 0) || 20 * 60,
     browserTTLSec: +(process.env.SECUTILS_WEB_SCRAPER_BROWSER_TTL_SEC ?? 0) || 10 * 60,
+    userAgent: process.env.SECUTILS_WEB_SCRAPER_USER_AGENT,
   };
 }
