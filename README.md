@@ -1,3 +1,6 @@
+>[!IMPORTANT]
+> **The repository is deprecated, Secutils.dev has switched to [secutils-dev/retrack](https://github.com/secutils-dev/retrack).**
+
 # <img src="https://raw.githubusercontent.com/secutils-dev/secutils/main/assets/logo/secutils-logo-initials.png" alt="Secutils.dev" width="22"> [Secutils.dev](https://secutils.dev) Web Scraper &middot; [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://github.com/secutils-dev/secutils-web-scraper/blob/main/LICENSE) [![Build Status](https://github.com/secutils-dev/secutils-web-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/secutils-dev/secutils-web-scraper/actions)
 
 The web scraper component of Secutils.dev, refer to [secutils-dev/secutils](https://github.com/secutils-dev/secutils) for more details.
